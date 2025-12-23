@@ -19,3 +19,6 @@ class User(UserBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
+
+class Message(SQLModel):
+    message: str
