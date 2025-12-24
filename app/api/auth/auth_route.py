@@ -8,11 +8,12 @@ from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.user import user_service
-from app.utils.deps import CurrentUser, SessionDep, get_current_active_superuser
+from app.utils.deps import CurrentUser, SessionDep, RoleChecker
 from app.core import security
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.api.user.user_schema import Message, NewPassword, UserPublic
+from app.api.user.user_model import Role
 from app.api.auth.auth_token import Token
 from app.utils import (
     generate_password_reset_token,
@@ -41,7 +42,9 @@ def login_access_token(
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return Token(
         access_token=security.create_access_token(
-            user.id, expires_delta=access_token_expires
+            subject=user.id,
+            expires_delta=access_token_expires,
+            role=user.role.value,
         )
     )
 
@@ -103,12 +106,12 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
 
 @router.post(
     "/password-recovery-html-content/{email}",
-    dependencies=[Depends(get_current_active_superuser)],
+    dependencies=[Depends(RoleChecker([Role.ADMIN]))],
     response_class=HTMLResponse,
 )
 def recover_password_html_content(email: str, session: SessionDep) -> Any:
     """
-    HTML Content for Password Recovery
+    HTML Content for Password Recovery (Admin only)
     """
     user = user_service.get_user_by_email(session=session, email=email)
 
