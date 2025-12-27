@@ -1,4 +1,10 @@
 name: Add to Project
+# This workflow is disabled as it references a fastapi organization project
+# To enable for your own project:
+# 1. Create a GitHub token with project permissions
+# 2. Add it as a secret named PROJECTS_TOKEN
+# 3. Update the project-url to your project
+# 4. Remove the 'if: false' condition
 
 on:
   pull_request_target:
@@ -9,6 +15,7 @@ on:
 
 jobs:
   add-to-project:
+    if: false  # Disabled - no project configured
     name: Add to project
     runs-on: ubuntu-latest
     steps:

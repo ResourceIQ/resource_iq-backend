@@ -1,4 +1,6 @@
 name: Deploy to Staging
+# This workflow is disabled as there is no docker-compose.yml file in this project
+# To enable, add docker-compose.yml and update the 'if' condition
 
 on:
   push:
@@ -7,8 +9,8 @@ on:
 
 jobs:
   deploy:
-    # Do not deploy in the main repository, only in user projects
-    if: github.repository_owner != 'fastapi'
+    # Disabled - no docker-compose.yml in this project
+    if: false
     runs-on:
       - self-hosted
       - staging
