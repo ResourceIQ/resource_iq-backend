@@ -5,6 +5,8 @@ import uuid
 from pydantic import EmailStr
 from sqlmodel import Field, SQLModel
 
+from app.api.user.user_model import Role
+
 
 # Properties to receive via API on creation
 class UserCreate(SQLModel):
@@ -15,6 +17,7 @@ class UserCreate(SQLModel):
     is_active: bool = True
     is_superuser: bool = False
     full_name: str | None = Field(default=None, max_length=255)
+    role: Role = Role.USER
 
 
 class UserRegister(SQLModel):
@@ -34,6 +37,7 @@ class UserUpdate(SQLModel):
     is_active: bool | None = None
     is_superuser: bool | None = None
     full_name: str | None = Field(default=None, max_length=255)
+    role: Role | None = None
 
 
 class UserUpdateMe(SQLModel):
@@ -59,6 +63,7 @@ class UserPublic(SQLModel):
     is_active: bool = True
     is_superuser: bool = False
     full_name: str | None = None
+    role: Role = Role.USER
 
 
 class UsersPublic(SQLModel):
