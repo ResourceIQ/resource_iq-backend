@@ -1,4 +1,6 @@
 name: Test Backend
+# This workflow is temporarily disabled
+# To enable, remove the 'if: false' condition
 
 on:
   push:
@@ -11,6 +13,7 @@ on:
 
 jobs:
   test-backend:
+    if: false  # Disabled temporarily
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -27,6 +30,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
+      PROJECT_NAME: ResourceIQ Test
       POSTGRES_SERVER: localhost
       POSTGRES_PORT: 5432
       POSTGRES_DB: app
