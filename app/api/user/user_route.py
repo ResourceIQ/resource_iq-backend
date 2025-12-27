@@ -4,16 +4,9 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import col, delete, func, select
+from sqlmodel import func, select
 
 from app.api.user import user_service
-from app.utils.deps import (
-    CurrentUser,
-    SessionDep,
-    get_current_active_superuser,
-)
-from app.core.config import settings
-from app.core.security import get_password_hash, verify_password
 from app.api.user.user_model import User
 from app.api.user.user_schema import (
     Message,
@@ -25,7 +18,14 @@ from app.api.user.user_schema import (
     UserUpdate,
     UserUpdateMe,
 )
+from app.core.config import settings
+from app.core.security import get_password_hash, verify_password
 from app.utils import generate_new_account_email, send_email
+from app.utils.deps import (
+    CurrentUser,
+    SessionDep,
+    get_current_active_superuser,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -85,7 +85,9 @@ def update_user_me(
     """
 
     if user_in.email:
-        existing_user = user_service.get_user_by_email(session=session, email=user_in.email)
+        existing_user = user_service.get_user_by_email(
+            session=session, email=user_in.email
+        )
         if existing_user and existing_user.id != current_user.id:
             raise HTTPException(
                 status_code=409, detail="User with this email already exists"
@@ -196,13 +198,17 @@ def update_user(
             detail="The user with this id does not exist in the system",
         )
     if user_in.email:
-        existing_user = user_service.get_user_by_email(session=session, email=user_in.email)
+        existing_user = user_service.get_user_by_email(
+            session=session, email=user_in.email
+        )
         if existing_user and existing_user.id != user_id:
             raise HTTPException(
                 status_code=409, detail="User with this email already exists"
             )
 
-    db_user = user_service.update_user(session=session, db_user=db_user, user_in=user_in)
+    db_user = user_service.update_user(
+        session=session, db_user=db_user, user_in=user_in
+    )
     return db_user
 
 

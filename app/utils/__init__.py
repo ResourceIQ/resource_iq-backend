@@ -1,4 +1,5 @@
 # Import and re-export utility functions from the parent-level utils.py
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -8,8 +9,11 @@ if parent_path not in sys.path:
     sys.path.insert(0, parent_path)
 
 # Import from the utils module at app level (the file, not this folder)
-import importlib.util
-spec = importlib.util.spec_from_file_location("email_utils", Path(__file__).parent.parent / "utils.py")
+spec = importlib.util.spec_from_file_location(
+    "email_utils", Path(__file__).parent.parent / "utils.py"
+)
+if spec is None or spec.loader is None:
+    raise ImportError("Failed to load email_utils module")
 email_utils = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(email_utils)
 
