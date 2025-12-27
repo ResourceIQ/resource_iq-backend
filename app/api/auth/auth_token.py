@@ -17,7 +17,7 @@ class Token(SQLModel):
 class TokenPayload(SQLModel):
     """
     JWT token payload schema.
-    
+
     Fields:
         sub: User ID (subject)
         exp: Expiration timestamp

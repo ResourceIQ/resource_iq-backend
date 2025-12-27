@@ -7,20 +7,20 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
+from app.api.auth.auth_token import Token
 from app.api.user import user_service
-from app.utils.deps import CurrentUser, SessionDep, RoleChecker
+from app.api.user.user_model import Role
+from app.api.user.user_schema import Message, NewPassword, UserPublic
 from app.core import security
 from app.core.config import settings
 from app.core.security import get_password_hash
-from app.api.user.user_schema import Message, NewPassword, UserPublic
-from app.api.user.user_model import Role
-from app.api.auth.auth_token import Token
 from app.utils import (
     generate_password_reset_token,
     generate_reset_password_email,
     send_email,
     verify_password_reset_token,
 )
+from app.utils.deps import CurrentUser, RoleChecker, SessionDep
 
 router = APIRouter(tags=["login"])
 

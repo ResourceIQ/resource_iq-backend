@@ -8,11 +8,11 @@ from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
 from sqlmodel import Session
 
+from app.api.auth.auth_token import TokenPayload
+from app.api.user.user_model import Role, User
 from app.core import security
 from app.core.config import settings
 from app.db.session import engine
-from app.api.user.user_model import User, Role
-from app.api.auth.auth_token import TokenPayload
 
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/login/access-token"
@@ -31,7 +31,7 @@ TokenDep = Annotated[str, Depends(reusable_oauth2)]
 def get_token_payload(token: TokenDep) -> TokenPayload:
     """
     Decode and return the token payload without DB lookup.
-    Use this for fast, stateless authentication when you don't need 
+    Use this for fast, stateless authentication when you don't need
     the full user object from the database.
     """
     try:
@@ -79,25 +79,25 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 class RoleChecker:
     """
     Dependency class for role-based access control.
-    
+
     Usage:
         @router.get("/admin-only", dependencies=[Depends(RoleChecker([Role.ADMIN]))])
         def admin_endpoint():
             ...
-        
+
         @router.get("/mod-or-admin", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))])
         def mod_endpoint():
             ...
     """
-    
+
     def __init__(self, allowed_roles: list[Role]):
         self.allowed_roles = allowed_roles
-    
+
     def __call__(self, current_user: CurrentUser) -> User:
         if current_user.role not in self.allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Role '{current_user.role.value}' is not authorized. Required: {[r.value for r in self.allowed_roles]}"
+                detail=f"Role '{current_user.role.value}' is not authorized. Required: {[r.value for r in self.allowed_roles]}",
             )
         return current_user
 
@@ -107,8 +107,7 @@ def require_admin(current_user: CurrentUser) -> User:
     """Require ADMIN role."""
     if current_user.role != Role.ADMIN:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
         )
     return current_user
 
@@ -118,7 +117,7 @@ def require_moderator_or_admin(current_user: CurrentUser) -> User:
     if current_user.role not in [Role.ADMIN, Role.MODERATOR]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Moderator or admin access required"
+            detail="Moderator or admin access required",
         )
     return current_user
 

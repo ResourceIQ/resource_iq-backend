@@ -20,7 +20,7 @@ def init_db(session: Session) -> None:
     # This works because the models are already imported and registered from app.models
     # SQLModel.metadata.create_all(engine)
 
-    from app.api.user.user_model import User, Role
+    from app.api.user.user_model import Role, User
     from app.api.user.user_schema import UserCreate
 
     user = session.exec(

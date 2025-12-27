@@ -8,7 +8,7 @@ from sqlmodel import Field, SQLModel
 
 class Role(str, Enum):
     """User roles for RBAC."""
-    
+
     ADMIN = "admin"
     MODERATOR = "moderator"
     USER = "user"
@@ -30,6 +30,7 @@ class User(UserBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
+
 
 class Message(SQLModel):
     message: str

@@ -1,4 +1,6 @@
 name: Playwright Tests
+# This workflow is disabled as there is no frontend in this project
+# To enable, remove the 'if: false' condition from the jobs
 
 on:
   push:
@@ -17,6 +19,7 @@ on:
 
 jobs:
   changes:
+    if: false  # Disabled - no frontend in this project
     runs-on: ubuntu-latest
     # Set job outputs to values from filter step
     outputs:
