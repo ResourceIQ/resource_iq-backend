@@ -1,4 +1,6 @@
 name: Test Docker Compose
+# This workflow is disabled as there is no docker-compose.yml file in this project
+# To enable, add docker-compose.yml and remove the 'if: false' condition
 
 on:
   push:
@@ -12,6 +14,7 @@ on:
 jobs:
 
   test-docker-compose:
+    if: false  # Disabled - no docker-compose.yml in this project
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

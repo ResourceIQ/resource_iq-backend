@@ -12,6 +12,31 @@ on:
 jobs:
   test-backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: changethis
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_SERVER: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: changethis
+      SECRET_KEY: test-secret-key-for-ci
+      FIRST_SUPERUSER: admin@example.com
+      FIRST_SUPERUSER_PASSWORD: changethis
+      BACKEND_CORS_ORIGINS: '["http://localhost"]'
+      ENVIRONMENT: local
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -24,21 +49,15 @@ jobs:
         with:
           version: "0.4.15"
           enable-cache: true
-      - run: docker compose down -v --remove-orphans
-      - run: docker compose up -d db mailcatcher
       - name: Migrate DB
         run: uv run bash scripts/prestart.sh
-        working-directory: backend
       - name: Run tests
         run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
-        working-directory: backend
-      - run: docker compose down -v --remove-orphans
       - name: Store coverage files
         uses: actions/upload-artifact@v6
         with:
           name: coverage-html
-          path: backend/htmlcov
+          path: htmlcov
           include-hidden-files: true
       - name: Coverage report
         run: uv run coverage report --fail-under=90
-        working-directory: backend

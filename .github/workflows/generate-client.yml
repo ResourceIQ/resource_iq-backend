@@ -1,4 +1,6 @@
 name: Generate Client
+# This workflow is disabled as there is no frontend in this project
+# To enable, remove the 'if: false' condition from the job
 
 on:
   pull_request:
@@ -8,6 +10,7 @@ on:
 
 jobs:
   generate-client:
+    if: false  # Disabled - no frontend in this project
     permissions:
       contents: write
     runs-on: ubuntu-latest
