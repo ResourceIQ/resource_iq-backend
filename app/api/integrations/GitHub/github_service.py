@@ -10,13 +10,13 @@ from github.PullRequest import PullRequest
 
 from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
 from app.core.config import settings
-from app.db.session import Session
+from app.utils.deps import SessionDep
 
 logger = logging.getLogger(__name__)
 
 
 class GithubIntegrationService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: SessionDep) -> None:
         self.db = db
         self.credentials: GithubOrgIntBaseModel | None = db.query(
             GithubOrgIntBaseModel
