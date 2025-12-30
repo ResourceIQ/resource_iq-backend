@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, HTTPException
-from app.api.integrations.GitHub.github_org_model import GithubOrgIntBaseModel
+from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
 from app.core.config import settings
 import hmac
 import hashlib
