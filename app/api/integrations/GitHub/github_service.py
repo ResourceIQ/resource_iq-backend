@@ -1,4 +1,7 @@
+"""GitHub integration service utilities."""
+
 # app/services/integration_service.py
+import logging
 import re
 from typing import Any
 
@@ -8,6 +11,8 @@ from github.PullRequest import PullRequest
 from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
 from app.core.config import settings
 from app.db.session import Session
+
+logger = logging.getLogger(__name__)
 
 
 class GithubIntegrationService:
@@ -93,7 +98,7 @@ class GithubIntegrationService:
             f"PR_INTENT: {pr.title}\n"
             f"DESCRIPTION: {clean_description[:1000]}\n"
             f"STATE: {pr.state}\n"
-            f"LABELS: {', '.join([l.name for l in pr.labels])}\n"
+            f"LABELS: {', '.join([label.name for label in pr.labels])}\n"
             f"COMMITS: {pr.commits}\n"
             f"CHANGED_FILES: {pr.changed_files}\n"
             f"ADDITIONS: +{pr.additions}\n"
@@ -102,7 +107,6 @@ class GithubIntegrationService:
 
         # 2. Body: File Changes Summary
         files = pr.get_files()
-        file_list = [f.filename for f in files]
 
         body = "\nFILE_CHANGES:\n"
         for f in files:
@@ -157,7 +161,7 @@ class GithubIntegrationService:
                     prs_content_list.append(self.generate_pr_context(pr))
             except Exception as e:
                 # Skip repositories where we don't have access or encounter errors
-                print(f"Skipping repo {repo.name}: {str(e)}")
+                logger.warning("Skipping repo %s: %s", repo.name, str(e))
                 continue
 
         return prs_content_list

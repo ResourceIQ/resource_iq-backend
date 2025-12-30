@@ -31,7 +31,12 @@ async def github_webhook(request: Request, session: SessionDep) -> dict[str, str
     if action == "created" and "installation" in payload:
         install_id = payload["installation"]["id"]
         org_name = payload["installation"]["account"]["login"]
-        print(f"SUCCESS: Linked Organization '{org_name}' with ID {install_id}")
+
+        import logging
+
+        logging.getLogger(__name__).info(
+            "Linked GitHub organization %s with installation %s", org_name, install_id
+        )
 
         integration = session.query(GithubOrgIntBaseModel).first()
         if not integration:
