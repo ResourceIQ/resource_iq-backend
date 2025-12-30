@@ -11,7 +11,7 @@ router = APIRouter(prefix="/github", tags=["github"])
 
 
 @router.post("/webhook")
-async def github_webhook(request: Request, session: SessionDep):
+async def github_webhook(request: Request, session: SessionDep) -> dict[str, str]:
     # 1. Verify Signature (Security)
     signature = request.headers.get("X-Hub-Signature-256")
     body = await request.body()
@@ -21,7 +21,7 @@ async def github_webhook(request: Request, session: SessionDep):
     )
     expected_signature = "sha256=" + mac.hexdigest()
 
-    if not hmac.compare_digest(signature, expected_signature):
+    if signature is None or not hmac.compare_digest(signature, expected_signature):
         raise HTTPException(status_code=403, detail="Invalid signature")
 
     # 2. Process Data

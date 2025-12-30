@@ -1,5 +1,6 @@
 # app/services/integration_service.py
 import re
+from typing import Any
 
 from github import Github, GithubIntegration
 from github.PullRequest import PullRequest
@@ -10,11 +11,13 @@ from app.db.session import Session
 
 
 class GithubIntegrationService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
-        self.credentials = db.query(GithubOrgIntBaseModel).first()
+        self.credentials: GithubOrgIntBaseModel | None = db.query(
+            GithubOrgIntBaseModel
+        ).first()
 
-    def get_github_client(self):
+    def get_github_client(self) -> Github:
         """
         Authenticates as the GitHub App.
         """
@@ -28,25 +31,25 @@ class GithubIntegrationService:
 
         # 2. Get Access Token for this specific Installation
         access_token = integration.get_access_token(
-            self.credentials.github_install_id
+            int(self.credentials.github_install_id)
         ).token
 
         # 3. Return PyGithub Client
         return Github(access_token)
 
     @property
-    def organization_name(self):
+    def organization_name(self) -> str:
         if not self.credentials:
             raise Exception("GitHub integration credentials not found in database")
         return self.credentials.org_name
 
     @property
-    def installation_id(self):
+    def installation_id(self) -> str:
         if not self.credentials:
             raise Exception("GitHub integration credentials not found in database")
         return self.credentials.github_install_id
 
-    def get_all_org_members(self):
+    def get_all_org_members(self) -> list[dict[str, Any]]:
         """
         Retrieves all members of the organization with their name and email.
         Note: Email is only returned if it is set to 'Public' by the user.
@@ -131,14 +134,14 @@ class GithubIntegrationService:
 
         return header + body
 
-    def get_org_closed_prs_context(self, max_prs: int = 5000):
+    def get_org_closed_prs_context(self, max_prs: int = 5000) -> list[str]:
         """
         Retrieves closed pull requests from all repositories in the organization.
         Note: This iterates through all org repositories, which can be slow for large orgs.
         """
         gh = self.get_github_client()
         org = gh.get_organization(self.organization_name)
-        prs_content_list = []
+        prs_content_list: list[str] = []
 
         # Iterate through all repositories in the organization
         for repo in org.get_repos():
