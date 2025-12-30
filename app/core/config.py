@@ -119,4 +119,5 @@ class Settings(BaseSettings):
     GITHUB_PRIVATE_KEY: str  # The full text of the .pem file
     GITHUB_WEBHOOK_SECRET: str
 
+
 settings = Settings()  # type: ignore
