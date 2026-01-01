@@ -24,7 +24,7 @@ async def get_closed_prs_context_per_author(
 ) -> list[PullRequestContent]:
     try:
         github_manager = GithubIntegrationService(session)
-        return github_manager.get_org_closed_prs_context_per_author(author=author)
+        return github_manager.get_org_closed_prs_context_by_author(author=author)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

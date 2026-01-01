@@ -1,6 +1,3 @@
-"""GitHub integration service utilities."""
-
-# app/services/integration_service.py
 import logging
 import re
 from typing import Any
@@ -114,7 +111,6 @@ class GithubIntegrationService:
             f"PR_INTENT: {pr.title}\n"
             f"DESCRIPTION: {clean_description[:1000]}\n"
             f"LABELS: {', '.join([label.name for label in pr.labels])}\n"
-            f"STACK: "
         )
 
         # 2. Body: File Changes Summary
@@ -135,7 +131,7 @@ class GithubIntegrationService:
         pr_content.context = header + body
         return pr_content
 
-    def get_org_closed_prs_context_per_author(
+    def get_org_closed_prs_context_by_author(
         self, author: GitHubUser, max_prs: int = 100
     ) -> list[PullRequestContent]:
         """
@@ -184,27 +180,31 @@ class GithubIntegrationService:
     ) -> dict[str, list[PullRequestContent]]:
         """
         Retrieves closed pull requests grouped by author for all org members.
-        Note: This iterates through all org repositories, which can be slow for large orgs.
+        This method retrieves all closed pull requests from all repositories in one go,
+        grouping them by author to improve performance.
         """
         gh = self.get_github_client()
         org = gh.get_organization(self.organization_name)
         authors_prs: dict[str, list[PullRequestContent]] = {}
 
-        for member in org.get_members():
+        # Retrieve all closed PRs from all repositories
+        for repo in org.get_repos():
             try:
-                member_user = GitHubUser(
-                    login=member.login,
-                    id=member.id,
-                    avatar_url=HttpUrl(member.avatar_url)
-                    if member.avatar_url
-                    else None,
-                    html_url=HttpUrl(member.html_url) if member.html_url else None,
+                repo_prs = repo.get_pulls(
+                    state="closed", sort="updated", direction="desc"
                 )
-                authors_prs[member.login] = self.get_org_closed_prs_context_per_author(
-                    author=member_user, max_prs=max_prs_per_author
-                )
+                for pr in repo_prs:
+                    if pr.user:
+                        author_login = pr.user.login
+                        if author_login not in authors_prs:
+                            authors_prs[author_login] = []
+                        authors_prs[author_login].append(self.generate_pr_context(pr))
             except Exception as e:
-                logger.warning("Skipping member %s: %s", member.login, str(e))
+                logger.warning("Skipping repo %s: %s", repo.name, str(e))
                 continue
+
+        # Limit the number of PRs per author
+        for author in authors_prs:
+            authors_prs[author] = authors_prs[author][:max_prs_per_author]
 
         return authors_prs
