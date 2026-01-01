@@ -7,11 +7,12 @@ from typing import Any
 
 from github import Github, GithubIntegration
 from github.PullRequest import PullRequest
+from pydantic import HttpUrl
 
 from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
+from app.api.integrations.GitHub.github_schema import GitHubUser, PullRequestContent
 from app.core.config import settings
 from app.utils.deps import SessionDep
-from app.api.integrations.GitHub.github_schema import PullRequestContent, GitHubUser
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +73,10 @@ class GithubIntegrationService:
                 GitHubUser(
                     login=member.login,
                     id=member.id,
-                    avatar_url=member.avatar_url,
-                    html_url=member.html_url,
+                    avatar_url=HttpUrl(member.avatar_url)
+                    if member.avatar_url
+                    else None,
+                    html_url=HttpUrl(member.html_url) if member.html_url else None,
                 ).model_dump()
             )
 
@@ -90,12 +93,18 @@ class GithubIntegrationService:
             include_diffs: If True, includes actual code diffs (can be large). Default False.
             max_tokens: Maximum tokens for the context string
         """
-        author=GitHubUser(
+        author = GitHubUser(
             login=pr.user.login,
             id=pr.user.id,
         )
-        pr_content = PullRequestContent(id=pr.id, number=pr.number, title=pr.title, html_url=pr.html_url, author=author)
-            
+        pr_content = PullRequestContent(
+            id=pr.id,
+            number=pr.number,
+            title=pr.title,
+            html_url=HttpUrl(pr.html_url),
+            author=author,
+        )
+
         # 1. Header: Intent & Impact
         clean_description = re.sub(
             r"<!--.*?-->", "", pr.body or "", flags=re.DOTALL
@@ -114,28 +123,28 @@ class GithubIntegrationService:
         body = "\nFILE_CHANGES:\n"
         for f in files:
             status = f.status  # 'added', 'removed', 'modified', 'renamed'
-            body += (
-                f"- [{status.upper()}] {f.filename}\n"
-            )
-        
+            body += f"- [{status.upper()}] {f.filename}\n"
+
         body += "\nCOMMITS:\n"
         for commit in pr.get_commits():
             commit_message = commit.commit.message
-            len_message = len(re.findall(r'\w+', commit_message))
+            len_message = len(re.findall(r"\w+", commit_message))
             if len_message > 5:
                 body += f"- {commit_message.splitlines()[0]}\n"
-        
-        pr_content.context = header + body        
+
+        pr_content.context = header + body
         return pr_content
 
-    def get_org_closed_prs_context_per_author(self, author: GitHubUser, max_prs: int = 100) -> list[PullRequestContent]:
+    def get_org_closed_prs_context_per_author(
+        self, author: GitHubUser, max_prs: int = 100
+    ) -> list[PullRequestContent]:
         """
         Retrieves closed pull requests from all repositories in the organization.
         Note: This iterates through all org repositories, which can be slow for large orgs.
         """
         gh = self.get_github_client()
         org = gh.get_organization(self.organization_name)
-        prs_content_list: list[str] = []
+        prs_content_list: list[PullRequestContent] = []
 
         # Iterate through all repositories in the organization
         for repo in org.get_repos():
@@ -150,16 +159,18 @@ class GithubIntegrationService:
                     if not pr.user:
                         logger.debug(f"Skipping PR #{pr.number} - no user")
                         continue
-                    
+
                     pr_author_id = pr.user.id
-                    logger.debug(f"Checking PR #{pr.number} in {repo.name}: author={pr_author_id}, looking_for={author.login}, match={pr_author_id == author.id}")
-                    
+                    logger.debug(
+                        f"Checking PR #{pr.number} in {repo.name}: author={pr_author_id}, looking_for={author.login}, match={pr_author_id == author.id}"
+                    )
+
                     if pr_author_id != author.id:
                         continue
-                    
+
                     if len(prs_content_list) >= max_prs:
                         return prs_content_list
-                    
+
                     prs_content_list.append(self.generate_pr_context(pr))
             except Exception as e:
                 # Skip repositories where we don't have access or encounter errors
@@ -177,15 +188,17 @@ class GithubIntegrationService:
         """
         gh = self.get_github_client()
         org = gh.get_organization(self.organization_name)
-        authors_prs: dict[str, list[str]] = {}
+        authors_prs: dict[str, list[PullRequestContent]] = {}
 
         for member in org.get_members():
             try:
                 member_user = GitHubUser(
                     login=member.login,
                     id=member.id,
-                    avatar_url=member.avatar_url,
-                    html_url=member.html_url,
+                    avatar_url=HttpUrl(member.avatar_url)
+                    if member.avatar_url
+                    else None,
+                    html_url=HttpUrl(member.html_url) if member.html_url else None,
                 )
                 authors_prs[member.login] = self.get_org_closed_prs_context_per_author(
                     author=member_user, max_prs=max_prs_per_author
