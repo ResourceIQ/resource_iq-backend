@@ -55,7 +55,9 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "$enujaImeth123"
     POSTGRES_DB: str = "resource-iq"
-    POSTGRES_SSL_MODE: str = "prefer"  # Options: disable, allow, prefer, require, verify-ca, verify-full
+    POSTGRES_SSL_MODE: str = (
+        "prefer"  # Options: disable, allow, prefer, require, verify-ca, verify-full
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -119,7 +121,7 @@ class Settings(BaseSettings):
     GITHUB_APP_ID: int
     GITHUB_PRIVATE_KEY: str  # The full text of the .pem file
     GITHUB_WEBHOOK_SECRET: str
-    
+
     JINA_API_KEY: str
     JINA_API_URL: str = "https://api.jina.ai"
     JINA_EMBEDDING_MODEL1: str = "jina-code-embeddings-0.5b"  # API model (1536 dims)

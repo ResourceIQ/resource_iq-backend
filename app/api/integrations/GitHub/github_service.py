@@ -6,11 +6,11 @@ from github import Github, GithubIntegration
 from github.PullRequest import PullRequest
 from pydantic import HttpUrl
 
+from app.api.embedding.embedding_service import VectorEmbeddingService
 from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
 from app.api.integrations.GitHub.github_schema import GitHubUser, PullRequestContent
 from app.core.config import settings
 from app.utils.deps import SessionDep
-from app.api.embedding.embedding_service import VectorEmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -210,21 +210,25 @@ class GithubIntegrationService:
             authors_prs[author] = authors_prs[author][:max_prs_per_author]
 
         return authors_prs
-    
-    def sync_author_prs_to_vectors(self, author: GitHubUser, max_prs: int = 100) -> dict:
+
+    def sync_author_prs_to_vectors(
+        self, author: GitHubUser, max_prs: int = 100
+    ) -> dict[str, int | str]:
         """Fetch PRs for an author and store their vectors."""
-        pr_contents = self.get_org_closed_prs_context_per_author(author, max_prs)
+        pr_contents = self.get_org_closed_prs_context_by_author(author, max_prs)
         self.vector_service.store_pr_contexts(author, pr_contents)
         return {
             "author_login": author.login,
-            "prs_synced": len(pr_contents)
+            "prs_synced": len(pr_contents),
         }
-    
-    def sync_all_authors_prs_to_vectors(self, max_prs_per_author: int = 100) -> dict:
+
+    def sync_all_authors_prs_to_vectors(
+        self, max_prs_per_author: int = 100
+    ) -> dict[str, int]:
         """Fetch PRs for all authors and store their vectors."""
         authors_prs = self.get_org_closed_prs_context_all_authors(max_prs_per_author)
         self.vector_service.store_all_authors_pr_contexts(authors_prs)
         return {
             "total_authors": len(authors_prs),
-            "total_prs": sum(len(prs) for prs in authors_prs.values())
+            "total_prs": sum(len(prs) for prs in authors_prs.values()),
         }
