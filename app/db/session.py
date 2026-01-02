@@ -3,7 +3,18 @@ from sqlmodel import Session, create_engine, select
 from app.api.user import user_service
 from app.core.config import settings
 
-engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+# Configure engine with connection pool and SSL settings
+engine = create_engine(
+    str(settings.SQLALCHEMY_DATABASE_URI),
+    connect_args={
+        "sslmode": settings.POSTGRES_SSL_MODE,
+        "connect_timeout": 10,
+    },
+    pool_pre_ping=True,  # Enable connection health checks
+    pool_size=5,
+    max_overflow=10,
+    pool_recycle=3600,  # Recycle connections after 1 hour
+)
 
 
 # make sure all SQLModel models are imported (app.models) before initializing DB
