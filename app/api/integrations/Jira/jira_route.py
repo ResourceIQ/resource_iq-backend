@@ -214,8 +214,6 @@ async def get_all_workloads(session: SessionDep) -> list[DeveloperWorkload]:
     Useful for the recommendation engine to find the best-fit developer.
     """
     try:
-        from typing import cast as type_cast
-
         from app.api.integrations.Jira.jira_model import DeveloperProfile
 
         jira_service = JiraIntegrationService(session)
