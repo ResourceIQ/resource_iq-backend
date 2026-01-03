@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -103,9 +104,9 @@ class JiraWebhookEvent(BaseModel):
     webhook_event: str = Field(..., alias="webhookEvent")
     issue_event_type_name: str | None = Field(default=None, alias="issue_event_type_name")
     timestamp: int | None = None
-    issue: dict | None = None
-    user: dict | None = None
-    changelog: dict | None = None
+    issue: dict[str, Any] | None = None
+    user: dict[str, Any] | None = None
+    changelog: dict[str, Any] | None = None
 
     class Config:
         populate_by_name = True

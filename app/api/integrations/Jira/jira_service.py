@@ -608,10 +608,11 @@ class JiraIntegrationService:
 
     def _update_all_developer_workloads(self) -> None:
         """Update workload for all developers with assigned issues."""
-        # Get unique assignees
+        # Get unique assignees - cast column for mypy compatibility
+        assignee_col = cast(Any, JiraIssue.assignee_account_id)
         assignees = (
-            self.db.query(JiraIssue.assignee_account_id)
-            .filter(cast(Any, JiraIssue.assignee_account_id.isnot(None)))
+            self.db.query(assignee_col)
+            .filter(assignee_col.isnot(None))
             .distinct()
             .all()
         )
@@ -751,7 +752,7 @@ class JiraIntegrationService:
             logger.error(f"Error searching similar issues: {str(e)}")
             raise
 
-    def process_webhook_event(self, event_type: str, payload: dict) -> dict[str, Any]:
+    def process_webhook_event(self, event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         """
         Process a Jira webhook event for real-time updates.
         """

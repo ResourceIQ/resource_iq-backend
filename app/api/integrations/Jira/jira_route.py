@@ -1,6 +1,6 @@
 """Jira integration API routes."""
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -220,10 +220,11 @@ async def get_all_workloads(session: SessionDep) -> list[DeveloperWorkload]:
 
         jira_service = JiraIntegrationService(session)
 
-        # Get all developers with Jira accounts
+        # Get all developers with Jira accounts - cast column for mypy
+        account_col = cast(Any, DeveloperProfile.jira_account_id)
         profiles = (
             session.query(DeveloperProfile)
-            .filter(type_cast(Any, DeveloperProfile.jira_account_id.isnot(None)))
+            .filter(account_col.isnot(None))
             .all()
         )
 
