@@ -1,6 +1,5 @@
 """Jira integration service class."""
 
-import functools
 import hashlib
 import hmac
 import logging
@@ -12,7 +11,6 @@ from datetime import datetime, timedelta
 from typing import Any, cast
 
 import httpx
-import requests
 from jira import JIRA
 from jira.resources import Issue
 from pydantic import HttpUrl
@@ -23,14 +21,14 @@ from app.api.integrations.Jira.jira_model import (
     DeveloperProfile,
     JiraIssue,
     JiraIssueVector,
-    JiraOrgIntegration,
     JiraOAuthToken,
+    JiraOrgIntegration,
 )
 from app.api.integrations.Jira.jira_schema import (
     DeveloperWorkload,
-    JiraComment,
     JiraAuthCallbackResponse,
     JiraAuthConnectResponse,
+    JiraComment,
     JiraIssueContent,
     JiraSyncResponse,
     JiraUser,
@@ -101,7 +99,7 @@ class JiraIntegrationService:
         }
 
         url = f"{settings.ATLASSIAN_AUTH_URL}?{urllib.parse.urlencode(params)}"
-        return JiraAuthConnectResponse(auth_url=url, state=state)
+        return JiraAuthConnectResponse(auth_url=cast(HttpUrl, url), state=state)
 
     def handle_oauth_callback(self, code: str, state: str) -> JiraAuthCallbackResponse:
         if not self._verify_state(state):
@@ -112,7 +110,7 @@ class JiraIntegrationService:
         return JiraAuthCallbackResponse(
             status="connected",
             cloud_id=token.cloud_id,
-            jira_site_url=token.jira_site_url,
+            jira_site_url=cast(HttpUrl | None, token.jira_site_url),
             expires_at=token.expires_at,
             scope=token.scope,
         )
@@ -129,13 +127,9 @@ class JiraIntegrationService:
             "redirect_uri": str(settings.ATLASSIAN_REDIRECT_URI),
         }
 
-        resp = httpx.post(
-            str(settings.ATLASSIAN_TOKEN_URL), json=payload, timeout=10
-        )
+        resp = httpx.post(str(settings.ATLASSIAN_TOKEN_URL), json=payload, timeout=10)
         if resp.status_code != 200:
-            raise ValueError(
-                f"Token exchange failed ({resp.status_code}): {resp.text}"
-            )
+            raise ValueError(f"Token exchange failed ({resp.status_code}): {resp.text}")
 
         data = resp.json()
         access_token: str = data.get("access_token")
@@ -182,7 +176,7 @@ class JiraIntegrationService:
             raise ValueError(
                 f"Failed to fetch accessible resources ({resp.status_code}): {resp.text}"
             )
-        return resp.json()
+        return cast(list[dict[str, Any]], resp.json())
 
     def _store_token(
         self,
@@ -195,8 +189,8 @@ class JiraIntegrationService:
         jira_site_url: str | None,
     ) -> JiraOAuthToken:
         if jira_site_url:
-            jira_site_url = jira_site_url.strip().rstrip('/')
-        
+            jira_site_url = jira_site_url.strip().rstrip("/")
+
         token = None
         if cloud_id:
             token = (
@@ -205,9 +199,11 @@ class JiraIntegrationService:
                 .first()
             )
         if not token:
-            token = self.db.query(JiraOAuthToken).order_by(
-                cast(Any, JiraOAuthToken.created_at).desc()
-            ).first()
+            token = (
+                self.db.query(JiraOAuthToken)
+                .order_by(cast(Any, JiraOAuthToken.created_at).desc())
+                .first()
+            )
 
         if token:
             token.access_token = access_token
@@ -266,13 +262,9 @@ class JiraIntegrationService:
             "refresh_token": token.refresh_token,
         }
 
-        resp = httpx.post(
-            str(settings.ATLASSIAN_TOKEN_URL), json=payload, timeout=10
-        )
+        resp = httpx.post(str(settings.ATLASSIAN_TOKEN_URL), json=payload, timeout=10)
         if resp.status_code != 200:
-            raise ValueError(
-                f"Token refresh failed ({resp.status_code}): {resp.text}"
-            )
+            raise ValueError(f"Token refresh failed ({resp.status_code}): {resp.text}")
 
         data = resp.json()
         access_token: str = data.get("access_token")
@@ -311,27 +303,32 @@ class JiraIntegrationService:
             token = self._get_active_token()
             if token and token.access_token:
                 if token.jira_site_url:
-                    token.jira_site_url = token.jira_site_url.strip().rstrip('/')
+                    token.jira_site_url = token.jira_site_url.strip().rstrip("/")
                     self.db.query(JiraOAuthToken).filter(
                         cast(Any, JiraOAuthToken.id == token.id)
-                    ).update({JiraOAuthToken.jira_site_url: token.jira_site_url})
+                    ).update({"jira_site_url": token.jira_site_url})
                     self.db.commit()
-                
+
                 if not token.cloud_id:
-                    raise ValueError("No cloud_id available for OAuth - token may be invalid")
-                
+                    raise ValueError(
+                        "No cloud_id available for OAuth - token may be invalid"
+                    )
+
                 # For Jira Cloud OAuth 2.0, use the Atlassian API gateway format
                 api_gateway_url = f"https://api.atlassian.com/ex/jira/{token.cloud_id}"
-                
-                self._client = JIRA(
-                    server=api_gateway_url,
-                    options={'verify': True}
+
+                self._client = JIRA(server=api_gateway_url, options={"verify": True})
+
+                self._client._session.headers.update(
+                    {"Authorization": f"Bearer {token.access_token}"}
                 )
-                
-                self._client._session.headers.update({"Authorization": f"Bearer {token.access_token}"})
-                self._client._session.headers['_jira_site_url'] = token.jira_site_url or ""
-                
-                logger.info(f"Jira client initialized with OAuth (cloud_id: {token.cloud_id})")
+                self._client._session.headers["_jira_site_url"] = (
+                    token.jira_site_url or ""
+                )
+
+                logger.info(
+                    f"Jira client initialized with OAuth (cloud_id: {token.cloud_id})"
+                )
                 return self._client
             else:
                 raise ValueError(
@@ -361,42 +358,42 @@ class JiraIntegrationService:
     def jira_url(self) -> str:
         """Get the configured Jira URL for browse links (not API calls)."""
         # If we have an OAuth client with stored site URL, use that
-        if self._client and '_jira_site_url' in self._client._session.headers:
-            return self._client._session.headers['_jira_site_url']
-        
+        if self._client and "_jira_site_url" in self._client._session.headers:
+            return cast(str, self._client._session.headers["_jira_site_url"])
+
         # Otherwise fall back to integration or settings
         if self.integration:
             return self.integration.jira_url
-        
+
         # For OAuth, try to get from token
         if settings.jira_oauth_enabled:
             token = self._get_active_token()
             if token and token.jira_site_url:
                 return token.jira_site_url
-        
+
         return settings.JIRA_URL or ""
 
     def get_all_projects(self) -> list[dict[str, Any]]:
         """Retrieve all accessible Jira projects."""
         client = self.get_jira_client()
-        
-        auth_header = client._session.headers.get('Authorization')
+
+        auth_header = client._session.headers.get("Authorization")
         if not auth_header:
             raise ValueError("No Authorization header in session")
-        
-        server = client._options['server']
+
+        server = client._options["server"]
         headers = {
-            'Authorization': auth_header,
-            'Accept': 'application/json',
+            "Authorization": auth_header,
+            "Accept": "application/json",
         }
-        
+
         try:
             resp = httpx.get(
                 f"{server}/rest/api/3/project",
                 headers=headers,
                 timeout=10,
             )
-            
+
             if resp.status_code == 401:
                 raise ValueError(
                     "OAuth token is invalid or unauthorized. "
@@ -405,10 +402,12 @@ class JiraIntegrationService:
                     "3) App has required scopes (read:jira-work, write:jira-work)"
                 )
             elif resp.status_code != 200:
-                raise ValueError(f"Failed to fetch projects: HTTP {resp.status_code} - {resp.text}")
-            
+                raise ValueError(
+                    f"Failed to fetch projects: HTTP {resp.status_code} - {resp.text}"
+                )
+
             data = resp.json()
-            projects = data if isinstance(data, list) else data.get('values', [])
+            projects = data if isinstance(data, list) else data.get("values", [])
             return [
                 {
                     "key": p.get("key"),

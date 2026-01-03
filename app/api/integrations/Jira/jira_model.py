@@ -166,7 +166,8 @@ class JiraOAuthToken(SQLModel, table=True):
         default=None, index=True, description="Atlassian cloud/site identifier"
     )
     jira_site_url: str | None = Field(
-        default=None, description="Base URL for the Jira site (from accessible-resources)"
+        default=None,
+        description="Base URL for the Jira site (from accessible-resources)",
     )
     access_token: str = Field(..., description="Bearer access token")
     refresh_token: str | None = Field(default=None, description="Refresh token")
