@@ -3,7 +3,7 @@ import re
 import unicodedata
 from typing import Any, cast
 
-import requests  # type: ignore[import-untyped]
+import requests
 from sqlalchemy.orm import Session
 
 from app.api.embedding.embedding_model import GitHubPRVector
