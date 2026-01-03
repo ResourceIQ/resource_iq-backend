@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.api.integrations.Jira.jira_schema import (
     DeveloperWorkload,
+    JiraAuthCallbackResponse,
+    JiraAuthConnectResponse,
     JiraIssueContent,
     JiraSyncRequest,
     JiraSyncResponse,
@@ -16,6 +18,34 @@ from app.api.integrations.Jira.jira_service import JiraIntegrationService
 from app.utils.deps import SessionDep
 
 router = APIRouter(prefix="/jira", tags=["jira"])
+
+
+@router.get("/auth/connect", response_model=JiraAuthConnectResponse)
+async def connect_jira(session: SessionDep) -> JiraAuthConnectResponse:
+    """Initiate Atlassian OAuth (3LO) for Jira Cloud."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.build_authorization_url()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start OAuth: {str(e)}")
+
+
+@router.get("/auth/callback", response_model=JiraAuthCallbackResponse)
+async def jira_oauth_callback(
+    session: SessionDep,
+    code: str = Query(..., description="Authorization code from Atlassian"),
+    state: str = Query(..., description="State returned by Atlassian"),
+) -> JiraAuthCallbackResponse:
+    """Handle Atlassian OAuth callback, exchange code, and persist tokens."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.handle_oauth_callback(code=code, state=state)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OAuth callback failed: {str(e)}")
 
 
 @router.get("/projects")

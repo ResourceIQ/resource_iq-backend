@@ -7,6 +7,23 @@ from typing import Any
 from pydantic import BaseModel, Field, HttpUrl
 
 
+class JiraAuthConnectResponse(BaseModel):
+    """Response for initiating Atlassian OAuth connect."""
+
+    auth_url: HttpUrl
+    state: str
+
+
+class JiraAuthCallbackResponse(BaseModel):
+    """Response after completing OAuth callback."""
+
+    status: str
+    cloud_id: str | None = None
+    jira_site_url: HttpUrl | None = None
+    expires_at: datetime | None = None
+    scope: str | None = None
+
+
 class JiraIssueStatus(str, Enum):
     """Common Jira issue statuses."""
 
