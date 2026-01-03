@@ -25,7 +25,9 @@ def verify_jira_webhook(request_body: bytes, signature: str | None) -> bool:
     """
     if not settings.JIRA_WEBHOOK_SECRET:
         # If no secret configured, skip verification (not recommended for production)
-        logger.warning("JIRA_WEBHOOK_SECRET not configured - skipping signature verification")
+        logger.warning(
+            "JIRA_WEBHOOK_SECRET not configured - skipping signature verification"
+        )
         return True
 
     if not signature:
@@ -124,7 +126,11 @@ async def jira_webhook(request: Request, session: SessionDep) -> dict[str, Any]:
                         "issue_key": issue_key,
                     }
 
-            return {"status": "ignored", "event": webhook_event, "reason": "no issue data"}
+            return {
+                "status": "ignored",
+                "event": webhook_event,
+                "reason": "no issue data",
+            }
 
         elif webhook_event.startswith("sprint_"):
             # Sprint events - could trigger a full sync or specific handling
@@ -152,7 +158,9 @@ async def jira_webhook(request: Request, session: SessionDep) -> dict[str, Any]:
 
                     profile = (
                         session.query(DeveloperProfile)
-                        .filter(cast(Any, DeveloperProfile.jira_account_id == account_id))
+                        .filter(
+                            cast(Any, DeveloperProfile.jira_account_id == account_id)
+                        )
                         .first()
                     )
 
@@ -175,7 +183,11 @@ async def jira_webhook(request: Request, session: SessionDep) -> dict[str, Any]:
                         "account_id": account_id,
                     }
 
-            return {"status": "ignored", "event": webhook_event, "reason": "no user data"}
+            return {
+                "status": "ignored",
+                "event": webhook_event,
+                "reason": "no user data",
+            }
 
         else:
             # Unknown or unhandled event
@@ -203,4 +215,3 @@ async def test_webhook_endpoint() -> dict[str, str]:
         "status": "ok",
         "message": "Jira webhook endpoint is active",
     }
-

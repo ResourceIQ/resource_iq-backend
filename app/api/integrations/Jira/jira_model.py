@@ -154,4 +154,3 @@ class DeveloperProfile(SQLModel, table=True):
 
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
-

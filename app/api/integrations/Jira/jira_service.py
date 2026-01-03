@@ -49,9 +49,7 @@ class JiraIntegrationService:
             return self._client
 
         # Determine URL and credentials
-        jira_url = (
-            self.integration.jira_url if self.integration else settings.JIRA_URL
-        )
+        jira_url = self.integration.jira_url if self.integration else settings.JIRA_URL
         jira_email = (
             self.integration.jira_email if self.integration else settings.JIRA_EMAIL
         )
@@ -160,7 +158,9 @@ class JiraIntegrationService:
             active=getattr(user_data, "active", True),
         )
 
-    def _parse_issue(self, issue: Issue, include_comments: bool = True) -> JiraIssueContent:
+    def _parse_issue(
+        self, issue: Issue, include_comments: bool = True
+    ) -> JiraIssueContent:
         """Parse Jira issue into JiraIssueContent schema."""
         fields = issue.fields
 
@@ -385,7 +385,9 @@ class JiraIntegrationService:
             existing.description = issue_content.description
             existing.status = issue_content.status
             existing.priority = issue_content.priority
-            existing.labels = ",".join(issue_content.labels) if issue_content.labels else None
+            existing.labels = (
+                ",".join(issue_content.labels) if issue_content.labels else None
+            )
             existing.assignee_account_id = (
                 issue_content.assignee.account_id if issue_content.assignee else None
             )
@@ -399,7 +401,11 @@ class JiraIntegrationService:
             existing.jira_resolved_at = issue_content.resolved_at
             existing.updated_at = datetime.utcnow()
             existing.comments_json = (
-                {"comments": [c.model_dump(mode="json") for c in issue_content.comments]}
+                {
+                    "comments": [
+                        c.model_dump(mode="json") for c in issue_content.comments
+                    ]
+                }
                 if issue_content.comments
                 else None
             )
@@ -417,26 +423,40 @@ class JiraIntegrationService:
                 priority=issue_content.priority,
                 labels=",".join(issue_content.labels) if issue_content.labels else None,
                 assignee_account_id=(
-                    issue_content.assignee.account_id if issue_content.assignee else None
+                    issue_content.assignee.account_id
+                    if issue_content.assignee
+                    else None
                 ),
                 assignee_display_name=(
-                    issue_content.assignee.display_name if issue_content.assignee else None
+                    issue_content.assignee.display_name
+                    if issue_content.assignee
+                    else None
                 ),
                 assignee_email=(
-                    issue_content.assignee.email_address if issue_content.assignee else None
+                    issue_content.assignee.email_address
+                    if issue_content.assignee
+                    else None
                 ),
                 reporter_account_id=(
-                    issue_content.reporter.account_id if issue_content.reporter else None
+                    issue_content.reporter.account_id
+                    if issue_content.reporter
+                    else None
                 ),
                 reporter_display_name=(
-                    issue_content.reporter.display_name if issue_content.reporter else None
+                    issue_content.reporter.display_name
+                    if issue_content.reporter
+                    else None
                 ),
                 issue_url=str(issue_content.issue_url),
                 jira_created_at=issue_content.created_at,
                 jira_updated_at=issue_content.updated_at,
                 jira_resolved_at=issue_content.resolved_at,
                 comments_json=(
-                    {"comments": [c.model_dump(mode="json") for c in issue_content.comments]}
+                    {
+                        "comments": [
+                            c.model_dump(mode="json") for c in issue_content.comments
+                        ]
+                    }
                     if issue_content.comments
                     else None
                 ),
@@ -475,7 +495,9 @@ class JiraIntegrationService:
         for issue, embedding in zip(valid_issues, embeddings, strict=False):
             try:
                 # Normalize embedding dimension
-                embedding = self.vector_service._normalize_embedding_dimension(embedding)
+                embedding = self.vector_service._normalize_embedding_dimension(
+                    embedding
+                )
 
                 # Check if exists
                 existing = (
@@ -724,7 +746,9 @@ class JiraIntegrationService:
 
             if assignee_account_id:
                 query_obj = query_obj.filter(
-                    cast(Any, JiraIssueVector.assignee_account_id == assignee_account_id)
+                    cast(
+                        Any, JiraIssueVector.assignee_account_id == assignee_account_id
+                    )
                 )
 
             # Order by similarity
@@ -752,7 +776,9 @@ class JiraIntegrationService:
             logger.error(f"Error searching similar issues: {str(e)}")
             raise
 
-    def process_webhook_event(self, event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def process_webhook_event(
+        self, event_type: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Process a Jira webhook event for real-time updates.
         """
@@ -803,4 +829,3 @@ class JiraIntegrationService:
             result["error"] = str(e)
 
         return result
-

@@ -195,7 +195,9 @@ class UnifiedSearchRequest(BaseModel):
     """Request schema for unified search across all sources."""
 
     query: str = Field(..., description="Search query text")
-    n_results: int = Field(default=10, ge=1, le=100, description="Max results to return")
+    n_results: int = Field(
+        default=10, ge=1, le=100, description="Max results to return"
+    )
 
     # Source selection
     search_github: bool = Field(default=True, description="Search GitHub PRs")

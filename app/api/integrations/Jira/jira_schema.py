@@ -74,12 +74,8 @@ class JiraSyncRequest(BaseModel):
     max_results: int = Field(
         default=100, ge=1, le=1000, description="Maximum issues to fetch per project"
     )
-    include_closed: bool = Field(
-        default=True, description="Include closed/done issues"
-    )
-    sync_comments: bool = Field(
-        default=True, description="Include issue comments"
-    )
+    include_closed: bool = Field(default=True, description="Include closed/done issues")
+    sync_comments: bool = Field(default=True, description="Include issue comments")
     generate_embeddings: bool = Field(
         default=True, description="Generate embeddings for NLP"
     )
@@ -102,7 +98,9 @@ class JiraWebhookEvent(BaseModel):
     """Schema for Jira webhook event payload."""
 
     webhook_event: str = Field(..., alias="webhookEvent")
-    issue_event_type_name: str | None = Field(default=None, alias="issue_event_type_name")
+    issue_event_type_name: str | None = Field(
+        default=None, alias="issue_event_type_name"
+    )
     timestamp: int | None = None
     issue: dict[str, Any] | None = None
     user: dict[str, Any] | None = None
@@ -120,13 +118,21 @@ class DeveloperWorkload(BaseModel):
     email: str | None
 
     # Workload metrics
-    open_issues: int = Field(default=0, description="Issues with status 'Open' or 'To Do'")
-    in_progress_issues: int = Field(default=0, description="Issues with status 'In Progress'")
-    in_review_issues: int = Field(default=0, description="Issues with status 'In Review'")
+    open_issues: int = Field(
+        default=0, description="Issues with status 'Open' or 'To Do'"
+    )
+    in_progress_issues: int = Field(
+        default=0, description="Issues with status 'In Progress'"
+    )
+    in_review_issues: int = Field(
+        default=0, description="Issues with status 'In Review'"
+    )
     total_active_issues: int = Field(default=0, description="Total active issues")
 
     # Breakdown by priority
-    high_priority_count: int = Field(default=0, description="High/Highest priority issues")
+    high_priority_count: int = Field(
+        default=0, description="High/Highest priority issues"
+    )
     medium_priority_count: int = Field(default=0, description="Medium priority issues")
     low_priority_count: int = Field(default=0, description="Low/Lowest priority issues")
 
@@ -139,7 +145,7 @@ class DeveloperWorkload(BaseModel):
     # Calculated workload score (higher = more busy)
     workload_score: float = Field(
         default=0.0,
-        description="Weighted workload score based on priority and issue type"
+        description="Weighted workload score based on priority and issue type",
     )
 
     last_updated: datetime | None = None
@@ -163,4 +169,3 @@ class UserMappingResponse(BaseModel):
     github_id: int | None
     internal_user_id: str | None
     mapped: bool
-

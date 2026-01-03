@@ -29,7 +29,9 @@ async def get_projects(session: SessionDep) -> list[dict[str, Any]]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch projects: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch projects: {str(e)}"
+        )
 
 
 @router.post("/sync", response_model=JiraSyncResponse)
@@ -62,7 +64,9 @@ async def get_issues(
     session: SessionDep,
     project_key: str | None = Query(default=None, description="Filter by project key"),
     status: str | None = Query(default=None, description="Filter by status"),
-    assignee_account_id: str | None = Query(default=None, description="Filter by assignee"),
+    assignee_account_id: str | None = Query(
+        default=None, description="Filter by assignee"
+    ),
     limit: int = Query(default=50, ge=1, le=500),
 ) -> list[dict[str, Any]]:
     """
@@ -187,7 +191,9 @@ async def get_developers(session: SessionDep) -> list[dict[str, Any]]:
         jira_service = JiraIntegrationService(session)
         return jira_service.get_all_developers()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch developers: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch developers: {str(e)}"
+        )
 
 
 @router.get("/developers/{jira_account_id}/workload", response_model=DeveloperWorkload)
@@ -220,11 +226,7 @@ async def get_all_workloads(session: SessionDep) -> list[DeveloperWorkload]:
 
         # Get all developers with Jira accounts - cast column for mypy
         account_col = cast(Any, DeveloperProfile.jira_account_id)
-        profiles = (
-            session.query(DeveloperProfile)
-            .filter(account_col.isnot(None))
-            .all()
-        )
+        profiles = session.query(DeveloperProfile).filter(account_col.isnot(None)).all()
 
         workloads = []
         for profile in profiles:
@@ -245,7 +247,9 @@ async def get_all_workloads(session: SessionDep) -> list[DeveloperWorkload]:
 
 
 @router.post("/users/map", response_model=UserMappingResponse)
-async def map_user(session: SessionDep, request: UserMappingRequest) -> UserMappingResponse:
+async def map_user(
+    session: SessionDep, request: UserMappingRequest
+) -> UserMappingResponse:
     """
     Map a Jira user to internal ResourceIQ profile and/or GitHub account.
     Satisfies UC-002: Handle User Mapping.
@@ -315,4 +319,3 @@ async def get_issue_context(session: SessionDep, issue_key: str) -> JiraIssueCon
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch issue context: {str(e)}"
         )
-
