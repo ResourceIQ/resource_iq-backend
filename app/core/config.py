@@ -129,5 +129,15 @@ class Settings(BaseSettings):
     USE_JINA_API: bool = False
     EMBEDDING_DIMENSION: int = 1536  # Must match database Vector(dim=1536)
 
+    # Jira Integration Settings
+    JIRA_URL: str | None = None  # e.g., https://your-domain.atlassian.net
+    JIRA_EMAIL: str | None = None  # Email associated with Jira API token
+    JIRA_API_TOKEN: str | None = None  # Atlassian API token
+    JIRA_WEBHOOK_SECRET: str | None = None  # Secret for validating Jira webhooks
+
+    @property
+    def jira_enabled(self) -> bool:
+        return bool(self.JIRA_URL and self.JIRA_EMAIL and self.JIRA_API_TOKEN)
+
 
 settings = Settings()  # type: ignore

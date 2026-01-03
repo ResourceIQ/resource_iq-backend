@@ -74,6 +74,21 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=changethis
 FIRST_SUPERUSER=admin@example.com
 FIRST_SUPERUSER_PASSWORD=changethis
+
+# GitHub Integration
+GITHUB_APP_ID=your_github_app_id
+GITHUB_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+GITHUB_WEBHOOK_SECRET=your_github_webhook_secret
+
+# Jira Integration
+JIRA_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=your-email@example.com
+JIRA_API_TOKEN=your_jira_api_token
+JIRA_WEBHOOK_SECRET=optional_webhook_secret
+
+# Jina Embeddings API
+JINA_API_KEY=your_jina_api_key
+USE_JINA_API=true
 ```
 
 **Important:** Change `changethis` values to secure passwords. Generate secret keys with:
