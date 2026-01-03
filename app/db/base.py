@@ -12,4 +12,5 @@ from app.api.integrations.Jira.jira_model import (  # noqa
     JiraIssue,
     JiraIssueVector,
     DeveloperProfile,
+    JiraOAuthToken,
 )
