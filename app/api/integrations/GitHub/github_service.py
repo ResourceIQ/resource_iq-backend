@@ -27,7 +27,9 @@ class GithubIntegrationService:
     @property
     def vector_service(self) -> VectorEmbeddingService:
         if not self._vector_service:
-            self._vector_service = VectorEmbeddingService(self.db, use_api=self.use_jina_api)
+            self._vector_service = VectorEmbeddingService(
+                self.db, use_api=self.use_jina_api
+            )
         return self._vector_service
 
     def get_github_client(self) -> Github:
