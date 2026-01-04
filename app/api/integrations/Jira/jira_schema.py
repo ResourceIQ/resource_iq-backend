@@ -128,7 +128,7 @@ class JiraWebhookEvent(BaseModel):
 
 
 class DeveloperWorkload(BaseModel):
-    """Schema for developer workload calculation (FR8)."""
+    """Schema for developer workload calculation."""
 
     jira_account_id: str
     display_name: str | None

@@ -11,10 +11,9 @@ from app.api.integrations.Jira.jira_schema import (
     JiraIssueContent,
     JiraSyncRequest,
     JiraSyncResponse,
-    UserMappingRequest,
-    UserMappingResponse,
 )
 from app.api.integrations.Jira.jira_service import JiraIntegrationService
+from app.api.profiles.profile_model import ResourceProfile
 from app.utils.deps import SessionDep
 
 router = APIRouter(prefix="/jira", tags=["jira"])
@@ -64,6 +63,67 @@ async def get_projects(session: SessionDep) -> list[dict[str, Any]]:
         )
 
 
+@router.get("/users")
+async def get_all_jira_users(
+    session: SessionDep,
+    max_results: int = Query(default=100, ge=1, le=1000),
+) -> list[dict[str, Any]]:
+    """
+    Get all users from Jira Cloud.
+    Returns all Atlassian account users (not apps/bots).
+    """
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_all_jira_users(max_results=max_results)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch Jira users: {str(e)}"
+        )
+
+
+@router.get("/projects/{project_key}/users")
+async def get_project_users(
+    session: SessionDep,
+    project_key: str,
+    max_results: int = Query(default=100, ge=1, le=1000),
+) -> list[dict[str, Any]]:
+    """
+    Get all users assignable to issues in a specific Jira project.
+    """
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_project_users(
+            project_key=project_key, max_results=max_results
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch project users: {str(e)}"
+        )
+
+
+@router.get("/users/{account_id}")
+async def get_user_by_account_id(
+    session: SessionDep,
+    account_id: str,
+) -> dict[str, Any]:
+    """
+    Get a specific Jira user by their account ID.
+    """
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_user_by_account_id(account_id=account_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch user: {str(e)}"
+        )
+
+
 @router.post("/sync", response_model=JiraSyncResponse)
 async def sync_issues(
     session: SessionDep,
@@ -89,150 +149,103 @@ async def sync_issues(
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
 
-@router.get("/issues")
-async def get_issues(
+@router.get("/vectors")
+async def get_issue_vectors(
     session: SessionDep,
     project_key: str | None = Query(default=None, description="Filter by project key"),
-    status: str | None = Query(default=None, description="Filter by status"),
     assignee_account_id: str | None = Query(
         default=None, description="Filter by assignee"
     ),
     limit: int = Query(default=50, ge=1, le=500),
 ) -> list[dict[str, Any]]:
     """
-    Get synced Jira issues from the database.
+    Get synced Jira issue vectors from the database.
+    Returns vector metadata without the actual embeddings.
     """
     try:
         from typing import cast as type_cast
 
-        from app.api.integrations.Jira.jira_model import JiraIssue
+        from app.api.integrations.Jira.jira_model import JiraIssueVector
 
-        query = session.query(JiraIssue)
+        query = session.query(JiraIssueVector)
 
         if project_key:
-            query = query.filter(type_cast(Any, JiraIssue.project_key == project_key))
-        if status:
-            query = query.filter(type_cast(Any, JiraIssue.status == status))
+            query = query.filter(
+                type_cast(Any, JiraIssueVector.project_key == project_key)
+            )
         if assignee_account_id:
             query = query.filter(
-                type_cast(Any, JiraIssue.assignee_account_id == assignee_account_id)
+                type_cast(
+                    Any, JiraIssueVector.assignee_account_id == assignee_account_id
+                )
             )
 
-        issues = query.limit(limit).all()
+        vectors = query.limit(limit).all()
 
         return [
             {
-                "issue_id": i.issue_id,
-                "issue_key": i.issue_key,
-                "project_key": i.project_key,
-                "summary": i.summary,
-                "description": i.description,
-                "issue_type": i.issue_type,
-                "status": i.status,
-                "priority": i.priority,
-                "labels": i.labels.split(",") if i.labels else [],
-                "assignee": {
-                    "account_id": i.assignee_account_id,
-                    "display_name": i.assignee_display_name,
-                    "email": i.assignee_email,
-                }
-                if i.assignee_account_id
-                else None,
-                "issue_url": i.issue_url,
-                "jira_created_at": i.jira_created_at.isoformat()
-                if i.jira_created_at
-                else None,
-                "jira_updated_at": i.jira_updated_at.isoformat()
-                if i.jira_updated_at
-                else None,
+                "issue_id": v.issue_id,
+                "issue_key": v.issue_key,
+                "project_key": v.project_key,
+                "assignee_account_id": v.assignee_account_id,
+                "context": v.context[:500] if v.context else None,  # Truncated context
+                "created_at": v.created_at.isoformat() if v.created_at else None,
+                "updated_at": v.updated_at.isoformat() if v.updated_at else None,
             }
-            for i in issues
+            for v in vectors
         ]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch issues: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch issue vectors: {str(e)}"
+        )
 
 
-@router.get("/issues/{issue_key}")
-async def get_issue(session: SessionDep, issue_key: str) -> dict[str, Any]:
+@router.get("/vectors/{issue_key}")
+async def get_issue_vector(session: SessionDep, issue_key: str) -> dict[str, Any]:
     """
-    Get a specific Jira issue by key.
+    Get a specific Jira issue vector by key.
     """
     try:
         from typing import cast as type_cast
 
-        from app.api.integrations.Jira.jira_model import JiraIssue
+        from app.api.integrations.Jira.jira_model import JiraIssueVector
 
-        issue = (
-            session.query(JiraIssue)
-            .filter(type_cast(Any, JiraIssue.issue_key == issue_key))
+        vector = (
+            session.query(JiraIssueVector)
+            .filter(type_cast(Any, JiraIssueVector.issue_key == issue_key))
             .first()
         )
 
-        if not issue:
-            raise HTTPException(status_code=404, detail=f"Issue {issue_key} not found")
+        if not vector:
+            raise HTTPException(
+                status_code=404, detail=f"Vector for issue {issue_key} not found"
+            )
 
         return {
-            "issue_id": issue.issue_id,
-            "issue_key": issue.issue_key,
-            "project_key": issue.project_key,
-            "summary": issue.summary,
-            "description": issue.description,
-            "issue_type": issue.issue_type,
-            "status": issue.status,
-            "priority": issue.priority,
-            "labels": issue.labels.split(",") if issue.labels else [],
-            "assignee": {
-                "account_id": issue.assignee_account_id,
-                "display_name": issue.assignee_display_name,
-                "email": issue.assignee_email,
-            }
-            if issue.assignee_account_id
-            else None,
-            "reporter": {
-                "account_id": issue.reporter_account_id,
-                "display_name": issue.reporter_display_name,
-            }
-            if issue.reporter_account_id
-            else None,
-            "issue_url": issue.issue_url,
-            "comments": issue.comments_json,
-            "jira_created_at": issue.jira_created_at.isoformat()
-            if issue.jira_created_at
-            else None,
-            "jira_updated_at": issue.jira_updated_at.isoformat()
-            if issue.jira_updated_at
-            else None,
-            "jira_resolved_at": issue.jira_resolved_at.isoformat()
-            if issue.jira_resolved_at
-            else None,
+            "issue_id": vector.issue_id,
+            "issue_key": vector.issue_key,
+            "project_key": vector.project_key,
+            "assignee_account_id": vector.assignee_account_id,
+            "context": vector.context,
+            "metadata": vector.metadata_json,
+            "created_at": vector.created_at.isoformat() if vector.created_at else None,
+            "updated_at": vector.updated_at.isoformat() if vector.updated_at else None,
         }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch issue: {str(e)}")
-
-
-@router.get("/developers")
-async def get_developers(session: SessionDep) -> list[dict[str, Any]]:
-    """
-    Get all developers/users who have been assigned Jira issues.
-    """
-    try:
-        jira_service = JiraIntegrationService(session)
-        return jira_service.get_all_developers()
-    except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Failed to fetch developers: {str(e)}"
+            status_code=500, detail=f"Failed to fetch issue vector: {str(e)}"
         )
 
 
-@router.get("/developers/{jira_account_id}/workload", response_model=DeveloperWorkload)
-async def get_developer_workload(
+@router.get("/workload/{jira_account_id}", response_model=DeveloperWorkload)
+async def get_workload_by_account(
     session: SessionDep, jira_account_id: str
 ) -> DeveloperWorkload:
     """
-    Calculate and return the workload for a specific developer.
-    Satisfies FR8: Workload calculation based on open/in-progress tickets.
+    Calculate and return the Jira workload for a specific user by account ID.
+    Useful for the recommendation engine.
     """
     try:
         jira_service = JiraIntegrationService(session)
@@ -246,17 +259,15 @@ async def get_developer_workload(
 @router.get("/workloads")
 async def get_all_workloads(session: SessionDep) -> list[DeveloperWorkload]:
     """
-    Calculate and return workloads for all developers.
+    Calculate and return workloads for all developers with Jira connected.
     Useful for the recommendation engine to find the best-fit developer.
     """
     try:
-        from app.api.integrations.Jira.jira_model import DeveloperProfile
-
         jira_service = JiraIntegrationService(session)
 
-        # Get all developers with Jira accounts - cast column for mypy
-        account_col = cast(Any, DeveloperProfile.jira_account_id)
-        profiles = session.query(DeveloperProfile).filter(account_col.isnot(None)).all()
+        # Get all profiles with Jira accounts connected
+        account_col = cast(Any, ResourceProfile.jira_account_id)
+        profiles = session.query(ResourceProfile).filter(account_col.isnot(None)).all()
 
         workloads = []
         for profile in profiles:
@@ -276,35 +287,6 @@ async def get_all_workloads(session: SessionDep) -> list[DeveloperWorkload]:
         )
 
 
-@router.post("/users/map", response_model=UserMappingResponse)
-async def map_user(
-    session: SessionDep, request: UserMappingRequest
-) -> UserMappingResponse:
-    """
-    Map a Jira user to internal ResourceIQ profile and/or GitHub account.
-    Satisfies UC-002: Handle User Mapping.
-    """
-    try:
-        jira_service = JiraIntegrationService(session)
-        profile = jira_service.map_user(
-            jira_account_id=request.jira_account_id,
-            internal_user_id=request.internal_user_id,
-            github_login=request.github_login,
-        )
-
-        return UserMappingResponse(
-            jira_account_id=profile.jira_account_id or "",
-            jira_display_name=profile.jira_display_name,
-            jira_email=profile.jira_email,
-            github_login=profile.github_login,
-            github_id=profile.github_id,
-            internal_user_id=profile.internal_user_id,
-            mapped=bool(profile.internal_user_id or profile.github_login),
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to map user: {str(e)}")
-
-
 @router.post("/search/similar")
 async def search_similar_issues(
     session: SessionDep,
@@ -316,7 +298,7 @@ async def search_similar_issues(
     """
     Search for similar Jira issues using semantic similarity.
     Useful for finding related issues or suggesting issue assignments.
-    Prepares data for NLP recommendation engine (FR5).
+    Useful for finding related issues or suggesting issue assignments.
     """
     try:
         jira_service = JiraIntegrationService(session)
@@ -336,7 +318,7 @@ async def search_similar_issues(
 async def get_issue_context(session: SessionDep, issue_key: str) -> JiraIssueContent:
     """
     Get full issue context including NLP-ready context string.
-    Useful for the recommendation engine (FR5).
+    Useful for the recommendation engine.
     """
     try:
         jira_service = JiraIntegrationService(session)

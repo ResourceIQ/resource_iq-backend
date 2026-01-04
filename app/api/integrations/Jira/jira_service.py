@@ -18,8 +18,6 @@ from sqlalchemy.orm import Session
 
 from app.api.embedding.embedding_service import VectorEmbeddingService
 from app.api.integrations.Jira.jira_model import (
-    DeveloperProfile,
-    JiraIssue,
     JiraIssueVector,
     JiraOAuthToken,
     JiraOrgIntegration,
@@ -33,6 +31,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraSyncResponse,
     JiraUser,
 )
+from app.api.profiles.profile_model import ResourceProfile
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -419,6 +418,146 @@ class JiraIntegrationService:
         except httpx.RequestError as e:
             raise ValueError(f"HTTP error fetching projects: {str(e)}")
 
+    def get_all_jira_users(self, max_results: int = 100) -> list[dict[str, Any]]:
+        """Retrieve all users from Jira Cloud."""
+        client = self.get_jira_client()
+
+        auth_header = client._session.headers.get("Authorization")
+        if not auth_header:
+            raise ValueError("No Authorization header in session")
+
+        server = client._options["server"]
+        headers = {
+            "Authorization": auth_header,
+            "Accept": "application/json",
+        }
+
+        try:
+            # Use the users/search endpoint for Jira Cloud
+            resp = httpx.get(
+                f"{server}/rest/api/3/users/search",
+                headers=headers,
+                params={"maxResults": max_results},
+                timeout=15,
+            )
+
+            if resp.status_code == 401:
+                raise ValueError("OAuth token is invalid or unauthorized")
+            elif resp.status_code != 200:
+                raise ValueError(
+                    f"Failed to fetch users: HTTP {resp.status_code} - {resp.text}"
+                )
+
+            users = resp.json()
+            return [
+                {
+                    "account_id": u.get("accountId"),
+                    "display_name": u.get("displayName"),
+                    "email": u.get("emailAddress"),
+                    "avatar_url": u.get("avatarUrls", {}).get("48x48"),
+                    "active": u.get("active", True),
+                    "account_type": u.get("accountType"),
+                }
+                for u in users
+                if u.get("accountType") == "atlassian"  # Filter to real users only
+            ]
+        except httpx.RequestError as e:
+            raise ValueError(f"HTTP error fetching users: {str(e)}")
+
+    def get_project_users(
+        self, project_key: str, max_results: int = 100
+    ) -> list[dict[str, Any]]:
+        """Retrieve all users who are members/assignable in a specific project."""
+        client = self.get_jira_client()
+
+        auth_header = client._session.headers.get("Authorization")
+        if not auth_header:
+            raise ValueError("No Authorization header in session")
+
+        server = client._options["server"]
+        headers = {
+            "Authorization": auth_header,
+            "Accept": "application/json",
+        }
+
+        try:
+            # Use user/assignable/search to get users assignable to issues in project
+            resp = httpx.get(
+                f"{server}/rest/api/3/user/assignable/search",
+                headers=headers,
+                params={"project": project_key, "maxResults": max_results},
+                timeout=15,
+            )
+
+            if resp.status_code == 401:
+                raise ValueError("OAuth token is invalid or unauthorized")
+            elif resp.status_code == 404:
+                raise ValueError(f"Project '{project_key}' not found")
+            elif resp.status_code != 200:
+                raise ValueError(
+                    f"Failed to fetch project users: HTTP {resp.status_code} - {resp.text}"
+                )
+
+            users = resp.json()
+            return [
+                {
+                    "account_id": u.get("accountId"),
+                    "display_name": u.get("displayName"),
+                    "email": u.get("emailAddress"),
+                    "avatar_url": u.get("avatarUrls", {}).get("48x48"),
+                    "active": u.get("active", True),
+                    "account_type": u.get("accountType"),
+                }
+                for u in users
+            ]
+        except httpx.RequestError as e:
+            raise ValueError(f"HTTP error fetching project users: {str(e)}")
+
+    def get_user_by_account_id(self, account_id: str) -> dict[str, Any]:
+        """Retrieve a specific Jira user by their account ID."""
+        client = self.get_jira_client()
+
+        auth_header = client._session.headers.get("Authorization")
+        if not auth_header:
+            raise ValueError("No Authorization header in session")
+
+        server = client._options["server"]
+        headers = {
+            "Authorization": auth_header,
+            "Accept": "application/json",
+        }
+
+        try:
+            resp = httpx.get(
+                f"{server}/rest/api/3/user",
+                headers=headers,
+                params={"accountId": account_id},
+                timeout=10,
+            )
+
+            if resp.status_code == 401:
+                raise ValueError("OAuth token is invalid or unauthorized")
+            elif resp.status_code == 404:
+                raise ValueError(f"User with account ID '{account_id}' not found")
+            elif resp.status_code != 200:
+                raise ValueError(
+                    f"Failed to fetch user: HTTP {resp.status_code} - {resp.text}"
+                )
+
+            u = resp.json()
+            return {
+                "account_id": u.get("accountId"),
+                "display_name": u.get("displayName"),
+                "email": u.get("emailAddress"),
+                "avatar_url": u.get("avatarUrls", {}).get("48x48"),
+                "active": u.get("active", True),
+                "account_type": u.get("accountType"),
+                "timezone": u.get("timeZone"),
+                "locale": u.get("locale"),
+            }
+        except httpx.RequestError as e:
+            raise ValueError(f"HTTP error fetching user: {str(e)}")
+
     def fetch_issues(
         self,
         project_key: str | None = None,
@@ -616,7 +755,7 @@ class JiraIntegrationService:
     ) -> JiraSyncResponse:
         """
         Sync issues from Jira to local database.
-        Main data ingestion pipeline (FR4).
+        Main data ingestion pipeline.
         """
         import time
 
@@ -631,8 +770,8 @@ class JiraIntegrationService:
                 projects = self.get_all_projects()
                 project_keys = [p["key"] for p in projects]
 
-        issues_created = 0
-        issues_updated = 0
+        vectors_created = 0
+        vectors_updated = 0
         embeddings_generated = 0
         errors: list[str] = []
         all_issue_contents: list[JiraIssueContent] = []
@@ -652,14 +791,6 @@ class JiraIntegrationService:
                             issue, include_comments=sync_comments
                         )
                         all_issue_contents.append(issue_content)
-
-                        # Store/update in database
-                        created = self._store_issue(issue_content)
-                        if created:
-                            issues_created += 1
-                        else:
-                            issues_updated += 1
-
                     except Exception as e:
                         error_msg = f"Error processing issue {issue.key}: {str(e)}"
                         logger.error(error_msg)
@@ -670,20 +801,23 @@ class JiraIntegrationService:
                 logger.error(error_msg)
                 errors.append(error_msg)
 
-        # Generate embeddings if requested
+        # Generate and store embeddings (vectors only)
         if generate_embeddings and all_issue_contents:
             try:
-                embeddings_generated = self._store_issue_embeddings(all_issue_contents)
+                vectors_created, vectors_updated = self._store_issue_embeddings(
+                    all_issue_contents
+                )
+                embeddings_generated = vectors_created + vectors_updated
             except Exception as e:
                 error_msg = f"Error generating embeddings: {str(e)}"
                 logger.error(error_msg)
                 errors.append(error_msg)
 
-        # Update developer workloads
+        # Update resource profiles from vectors
         try:
-            self._update_all_developer_workloads()
+            self._update_resource_profiles_from_vectors(all_issue_contents)
         except Exception as e:
-            logger.warning(f"Error updating workloads: {str(e)}")
+            logger.warning(f"Error updating resource profiles: {str(e)}")
 
         self.db.commit()
 
@@ -692,125 +826,31 @@ class JiraIntegrationService:
         return JiraSyncResponse(
             status="completed" if not errors else "completed_with_errors",
             projects_synced=project_keys,
-            issues_synced=issues_created + issues_updated,
-            issues_created=issues_created,
-            issues_updated=issues_updated,
+            issues_synced=len(all_issue_contents),
+            issues_created=vectors_created,
+            issues_updated=vectors_updated,
             embeddings_generated=embeddings_generated,
             errors=errors,
             sync_duration_seconds=round(duration, 2),
         )
 
-    def _store_issue(self, issue_content: JiraIssueContent) -> bool:
-        """
-        Store or update a Jira issue in the database.
-        Returns True if created, False if updated.
-        """
-        # Check if issue exists
-        existing = (
-            self.db.query(JiraIssue)
-            .filter(cast(Any, JiraIssue.issue_id == issue_content.issue_id))
-            .first()
-        )
-
-        if existing:
-            # Update existing issue
-            existing.summary = issue_content.summary
-            existing.description = issue_content.description
-            existing.status = issue_content.status
-            existing.priority = issue_content.priority
-            existing.labels = (
-                ",".join(issue_content.labels) if issue_content.labels else None
-            )
-            existing.assignee_account_id = (
-                issue_content.assignee.account_id if issue_content.assignee else None
-            )
-            existing.assignee_display_name = (
-                issue_content.assignee.display_name if issue_content.assignee else None
-            )
-            existing.assignee_email = (
-                issue_content.assignee.email_address if issue_content.assignee else None
-            )
-            existing.jira_updated_at = issue_content.updated_at
-            existing.jira_resolved_at = issue_content.resolved_at
-            existing.updated_at = datetime.utcnow()
-            existing.comments_json = (
-                {
-                    "comments": [
-                        c.model_dump(mode="json") for c in issue_content.comments
-                    ]
-                }
-                if issue_content.comments
-                else None
-            )
-            return False
-        else:
-            # Create new issue
-            db_issue = JiraIssue(
-                issue_id=issue_content.issue_id,
-                issue_key=issue_content.issue_key,
-                project_key=issue_content.project_key,
-                summary=issue_content.summary,
-                description=issue_content.description,
-                issue_type=issue_content.issue_type,
-                status=issue_content.status,
-                priority=issue_content.priority,
-                labels=",".join(issue_content.labels) if issue_content.labels else None,
-                assignee_account_id=(
-                    issue_content.assignee.account_id
-                    if issue_content.assignee
-                    else None
-                ),
-                assignee_display_name=(
-                    issue_content.assignee.display_name
-                    if issue_content.assignee
-                    else None
-                ),
-                assignee_email=(
-                    issue_content.assignee.email_address
-                    if issue_content.assignee
-                    else None
-                ),
-                reporter_account_id=(
-                    issue_content.reporter.account_id
-                    if issue_content.reporter
-                    else None
-                ),
-                reporter_display_name=(
-                    issue_content.reporter.display_name
-                    if issue_content.reporter
-                    else None
-                ),
-                issue_url=str(issue_content.issue_url),
-                jira_created_at=issue_content.created_at,
-                jira_updated_at=issue_content.updated_at,
-                jira_resolved_at=issue_content.resolved_at,
-                comments_json=(
-                    {
-                        "comments": [
-                            c.model_dump(mode="json") for c in issue_content.comments
-                        ]
-                    }
-                    if issue_content.comments
-                    else None
-                ),
-            )
-            self.db.add(db_issue)
-            return True
-
-    def _store_issue_embeddings(self, issues: list[JiraIssueContent]) -> int:
+    def _store_issue_embeddings(
+        self, issues: list[JiraIssueContent]
+    ) -> tuple[int, int]:
         """
         Generate and store embeddings for issues.
-        Prepares data for NLP processing (FR5).
+        Prepares data for NLP processing.
+        Returns tuple of (created_count, updated_count).
         """
         if not issues:
-            return 0
+            return (0, 0)
 
         # Get contexts for embedding
         contexts = [issue.context or "" for issue in issues if issue.context]
         valid_issues = [issue for issue in issues if issue.context]
 
         if not contexts:
-            return 0
+            return (0, 0)
 
         try:
             embeddings = self.vector_service.generate_embeddings(contexts)
@@ -824,7 +864,8 @@ class JiraIntegrationService:
                 except Exception as doc_error:
                     logger.error(f"Failed to embed context: {str(doc_error)}")
 
-        stored_count = 0
+        created_count = 0
+        updated_count = 0
         for issue, embedding in zip(valid_issues, embeddings, strict=False):
             try:
                 # Normalize embedding dimension
@@ -842,7 +883,13 @@ class JiraIntegrationService:
                 if existing:
                     existing.embedding = embedding
                     existing.context = issue.context or ""
+                    existing.issue_key = issue.issue_key
+                    existing.project_key = issue.project_key
+                    existing.assignee_account_id = (
+                        issue.assignee.account_id if issue.assignee else None
+                    )
                     existing.updated_at = datetime.utcnow()
+                    updated_count += 1
                 else:
                     db_vector = JiraIssueVector(
                         issue_id=issue.issue_id,
@@ -855,201 +902,108 @@ class JiraIntegrationService:
                         context=issue.context or "",
                     )
                     self.db.add(db_vector)
-
-                stored_count += 1
+                    created_count += 1
 
             except Exception as e:
                 logger.error(f"Error storing embedding for {issue.issue_key}: {str(e)}")
 
-        return stored_count
+        return (created_count, updated_count)
 
     def calculate_developer_workload(self, jira_account_id: str) -> DeveloperWorkload:
         """
-        Calculate workload for a developer based on their open/in-progress issues.
-        Satisfies FR8: Workload calculation.
+        Calculate workload for a developer based on their vector entries.
+        Calculates workload score based on active issues.
+        Note: Full workload details require fetching live from Jira API.
         """
-        # Query issues assigned to this developer
-        issues = (
-            self.db.query(JiraIssue)
-            .filter(cast(Any, JiraIssue.assignee_account_id == jira_account_id))
-            .all()
+        # Get resource profile
+        profile = (
+            self.db.query(ResourceProfile)
+            .filter(cast(Any, ResourceProfile.jira_account_id == jira_account_id))
+            .first()
         )
 
-        # Get developer info
-        first_issue = issues[0] if issues else None
-        display_name = first_issue.assignee_display_name if first_issue else None
-        email = first_issue.assignee_email if first_issue else None
-
-        # Count by status
-        open_issues = 0
-        in_progress_issues = 0
-        in_review_issues = 0
-
-        # Count by priority
-        high_priority = 0
-        medium_priority = 0
-        low_priority = 0
-
-        # Count by type
-        bugs = 0
-        tasks = 0
-        stories = 0
-        other = 0
-
-        active_statuses = ["Open", "To Do", "In Progress", "In Review", "Reopened"]
-
-        for issue in issues:
-            if issue.status not in active_statuses:
-                continue
-
-            # Status counts
-            if issue.status in ["Open", "To Do", "Reopened"]:
-                open_issues += 1
-            elif issue.status == "In Progress":
-                in_progress_issues += 1
-            elif issue.status == "In Review":
-                in_review_issues += 1
-
-            # Priority counts
-            priority = (issue.priority or "").lower()
-            if priority in ["highest", "high", "critical", "blocker"]:
-                high_priority += 1
-            elif priority in ["medium", "normal"]:
-                medium_priority += 1
-            elif priority in ["low", "lowest", "trivial"]:
-                low_priority += 1
-
-            # Type counts
-            issue_type = (issue.issue_type or "").lower()
-            if "bug" in issue_type:
-                bugs += 1
-            elif "task" in issue_type or "sub-task" in issue_type:
-                tasks += 1
-            elif "story" in issue_type or "feature" in issue_type:
-                stories += 1
-            else:
-                other += 1
-
-        total_active = open_issues + in_progress_issues + in_review_issues
-
-        # Calculate weighted workload score
-        # High priority issues count more, bugs count more than tasks
-        workload_score = (
-            (high_priority * 3.0)
-            + (medium_priority * 2.0)
-            + (low_priority * 1.0)
-            + (bugs * 1.5)  # Bugs add extra weight
-            + (in_progress_issues * 0.5)  # In-progress adds slight weight
+        # Count vectors assigned to this developer
+        vector_count = (
+            self.db.query(JiraIssueVector)
+            .filter(cast(Any, JiraIssueVector.assignee_account_id == jira_account_id))
+            .count()
         )
 
         return DeveloperWorkload(
             jira_account_id=jira_account_id,
-            display_name=display_name,
-            email=email,
-            open_issues=open_issues,
-            in_progress_issues=in_progress_issues,
-            in_review_issues=in_review_issues,
-            total_active_issues=total_active,
-            high_priority_count=high_priority,
-            medium_priority_count=medium_priority,
-            low_priority_count=low_priority,
-            bugs_count=bugs,
-            tasks_count=tasks,
-            stories_count=stories,
-            other_count=other,
-            workload_score=round(workload_score, 2),
+            display_name=profile.jira_display_name if profile else None,
+            email=profile.jira_email if profile else None,
+            total_active_issues=vector_count,
+            workload_score=float(vector_count),
             last_updated=datetime.utcnow(),
         )
 
-    def _update_all_developer_workloads(self) -> None:
-        """Update workload for all developers with assigned issues."""
-        # Get unique assignees - cast column for mypy compatibility
-        assignee_col = cast(Any, JiraIssue.assignee_account_id)
-        assignees = (
-            self.db.query(assignee_col)
-            .filter(assignee_col.isnot(None))
-            .distinct()
-            .all()
-        )
+    def _update_resource_profiles_from_vectors(
+        self, issues: list[JiraIssueContent]
+    ) -> None:
+        """Update resource profiles based on parsed issue data."""
+        # Collect unique assignees from parsed issues
+        assignees: dict[str, JiraIssueContent] = {}
+        for issue in issues:
+            if issue.assignee and issue.assignee.account_id:
+                assignees[issue.assignee.account_id] = issue
 
-        for (account_id,) in assignees:
-            if not account_id:
-                continue
-
+        for account_id, issue in assignees.items():
             try:
-                workload = self.calculate_developer_workload(account_id)
-
-                # Update or create developer profile
                 profile = (
-                    self.db.query(DeveloperProfile)
-                    .filter(cast(Any, DeveloperProfile.jira_account_id == account_id))
+                    self.db.query(ResourceProfile)
+                    .filter(cast(Any, ResourceProfile.jira_account_id == account_id))
                     .first()
                 )
 
-                if profile:
-                    profile.current_workload = workload.total_active_issues
-                    profile.workload_updated_at = datetime.utcnow()
-                    profile.jira_display_name = workload.display_name
-                    profile.jira_email = workload.email
-                else:
-                    profile = DeveloperProfile(
-                        jira_account_id=account_id,
-                        jira_display_name=workload.display_name,
-                        jira_email=workload.email,
-                        current_workload=workload.total_active_issues,
-                        workload_updated_at=datetime.utcnow(),
+                # Count vectors for this developer
+                vector_count = (
+                    self.db.query(JiraIssueVector)
+                    .filter(
+                        cast(Any, JiraIssueVector.assignee_account_id == account_id)
                     )
-                    self.db.add(profile)
+                    .count()
+                )
+
+                if profile:
+                    profile.jira_workload = vector_count
+                    profile.total_workload = (
+                        profile.jira_workload + profile.github_workload
+                    )
+                    profile.workload_updated_at = datetime.utcnow()
+                    if issue.assignee:
+                        profile.jira_display_name = issue.assignee.display_name
+                        profile.jira_email = issue.assignee.email_address
+                # Note: Don't create new profiles here - they should be created
+                # via the profiles API when users connect their Jira accounts
 
             except Exception as e:
-                logger.warning(f"Error updating workload for {account_id}: {str(e)}")
+                logger.warning(
+                    f"Error updating resource profile for {account_id}: {str(e)}"
+                )
 
     def get_all_developers(self) -> list[dict[str, Any]]:
-        """Get all Jira users who have been assigned issues."""
-        profiles = self.db.query(DeveloperProfile).all()
+        """Get all users with Jira accounts connected."""
+        profiles = (
+            self.db.query(ResourceProfile)
+            .filter(cast(Any, ResourceProfile.jira_account_id).isnot(None))
+            .all()
+        )
         return [
             {
+                "user_id": str(p.user_id),
                 "jira_account_id": p.jira_account_id,
                 "display_name": p.jira_display_name,
                 "email": p.jira_email,
                 "github_login": p.github_login,
-                "internal_user_id": p.internal_user_id,
-                "current_workload": p.current_workload,
+                "jira_workload": p.jira_workload,
+                "github_workload": p.github_workload,
+                "total_workload": p.total_workload,
                 "skills": p.skills.split(",") if p.skills else [],
                 "domains": p.domains.split(",") if p.domains else [],
             }
             for p in profiles
         ]
-
-    def map_user(
-        self,
-        jira_account_id: str,
-        internal_user_id: str | None = None,
-        github_login: str | None = None,
-    ) -> DeveloperProfile:
-        """
-        Map a Jira user to internal ResourceIQ profile and/or GitHub account.
-        Satisfies UC-002: User Mapping.
-        """
-        profile = (
-            self.db.query(DeveloperProfile)
-            .filter(cast(Any, DeveloperProfile.jira_account_id == jira_account_id))
-            .first()
-        )
-
-        if not profile:
-            profile = DeveloperProfile(jira_account_id=jira_account_id)
-            self.db.add(profile)
-
-        if internal_user_id:
-            profile.internal_user_id = internal_user_id
-        if github_login:
-            profile.github_login = github_login
-
-        profile.updated_at = datetime.utcnow()
-        self.db.commit()
-
-        return profile
 
     def search_similar_issues(
         self,
@@ -1114,6 +1068,7 @@ class JiraIntegrationService:
     ) -> dict[str, Any]:
         """
         Process a Jira webhook event for real-time updates.
+        Only stores vector embeddings, not full issue data.
         """
         result = {"event_type": event_type, "processed": False}
 
@@ -1121,34 +1076,30 @@ class JiraIntegrationService:
             if event_type in ["jira:issue_created", "jira:issue_updated"]:
                 issue_data = payload.get("issue")
                 if issue_data:
-                    # Fetch full issue details and sync
+                    # Fetch full issue details and generate embedding
                     client = self.get_jira_client()
                     issue = client.issue(issue_data["key"])
                     issue_content = self._parse_issue(issue)
-                    created = self._store_issue(issue_content)
 
-                    # Generate embedding
+                    # Generate and store embedding
                     if issue_content.context:
-                        self._store_issue_embeddings([issue_content])
+                        created, updated = self._store_issue_embeddings([issue_content])
 
-                    # Update workload if assignee exists
-                    if issue_content.assignee:
-                        self._update_all_developer_workloads()
+                        # Update resource profile if assignee exists
+                        if issue_content.assignee:
+                            self._update_resource_profiles_from_vectors([issue_content])
 
-                    self.db.commit()
+                        self.db.commit()
 
-                    result["processed"] = True
-                    result["issue_key"] = issue.key
-                    result["action"] = "created" if created else "updated"
+                        result["processed"] = True
+                        result["issue_key"] = issue.key
+                        result["action"] = "created" if created > 0 else "updated"
 
             elif event_type == "jira:issue_deleted":
                 issue_data = payload.get("issue")
                 if issue_data:
                     issue_id = issue_data.get("id")
-                    # Delete from database
-                    self.db.query(JiraIssue).filter(
-                        cast(Any, JiraIssue.issue_id == issue_id)
-                    ).delete()
+                    # Delete vector from database
                     self.db.query(JiraIssueVector).filter(
                         cast(Any, JiraIssueVector.issue_id == issue_id)
                     ).delete()

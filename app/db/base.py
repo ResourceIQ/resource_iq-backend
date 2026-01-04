@@ -9,8 +9,9 @@ from app.api.embedding.embedding_model import GitHubPRVector  # noqa
 # Jira integration models
 from app.api.integrations.Jira.jira_model import (  # noqa
     JiraOrgIntegration,
-    JiraIssue,
     JiraIssueVector,
-    DeveloperProfile,
     JiraOAuthToken,
 )
+
+# Resource profiles
+from app.api.profiles.profile_model import ResourceProfile  # noqa
