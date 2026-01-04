@@ -88,7 +88,9 @@ def create_or_get_user(
     existing = db.query(User).filter(cast(Any, User.email == email)).first()
     if existing:
         # Update password if it's a placeholder
-        if update_password and existing.hashed_password.startswith("$2b$12$placeholder"):
+        if update_password and existing.hashed_password.startswith(
+            "$2b$12$placeholder"
+        ):
             existing.hashed_password = get_password_hash(DEFAULT_TEST_PASSWORD)
             existing.full_name = full_name
             db.commit()
@@ -130,7 +132,8 @@ def init_test_profiles(db: Session) -> None:
                     .filter(
                         cast(
                             Any,
-                            ResourceProfile.jira_account_id == member["jira_account_id"],
+                            ResourceProfile.jira_account_id
+                            == member["jira_account_id"],
                         )
                     )
                     .first()

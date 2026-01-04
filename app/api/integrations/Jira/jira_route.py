@@ -119,9 +119,7 @@ async def get_user_by_account_id(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to fetch user: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to fetch user: {str(e)}")
 
 
 @router.post("/sync", response_model=JiraSyncResponse)
