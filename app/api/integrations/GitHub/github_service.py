@@ -18,10 +18,17 @@ logger = logging.getLogger(__name__)
 class GithubIntegrationService:
     def __init__(self, db: SessionDep, use_jina_api: bool = True) -> None:
         self.db = db
+        self.use_jina_api = use_jina_api
         self.credentials: GithubOrgIntBaseModel | None = db.query(
             GithubOrgIntBaseModel
         ).first()
-        self.vector_service = VectorEmbeddingService(db, use_api=use_jina_api)
+        self._vector_service: VectorEmbeddingService | None = None
+
+    @property
+    def vector_service(self) -> VectorEmbeddingService:
+        if not self._vector_service:
+            self._vector_service = VectorEmbeddingService(self.db, use_api=self.use_jina_api)
+        return self._vector_service
 
     def get_github_client(self) -> Github:
         """

@@ -27,7 +27,7 @@ class VectorEmbeddingService:
             self.api_key = settings.JINA_API_KEY
             self.api_url = f"{settings.JINA_API_URL}/v1/embeddings"
             self.embedding_model = settings.JINA_EMBEDDING_MODEL1
-            logger.info(
+            logger.debug(
                 f"Using Jina API for embeddings with model: {self.embedding_model}"
             )
         else:
@@ -36,7 +36,7 @@ class VectorEmbeddingService:
                 from sentence_transformers import SentenceTransformer
 
                 self.model = SentenceTransformer(settings.JINA_EMBEDDING_MODEL2)
-                logger.info(
+                logger.debug(
                     f"Using local Jina model for embeddings: {settings.JINA_EMBEDDING_MODEL2}"
                 )
             except ImportError:
