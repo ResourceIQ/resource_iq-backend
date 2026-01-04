@@ -19,8 +19,11 @@ def custom_generate_unique_id(route: APIRoute) -> str:
     return f"{route.tags[0]}-{route.name}"
 
 
+from collections.abc import AsyncGenerator
+
+
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup and shutdown events."""
     # Startup: Initialize test profiles
     logger.info("Starting up - initializing test profiles...")

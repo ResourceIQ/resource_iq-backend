@@ -110,7 +110,7 @@ async def jira_webhook(request: Request, session: SessionDep) -> dict[str, Any]:
             }
 
         elif webhook_event in ["comment_created", "comment_updated"]:
-            # Re-sync the issue to update comments
+            # Re-sync the issue to update vector embedding
             issue_data = payload.get("issue")
             if issue_data:
                 issue_key = issue_data.get("key")
@@ -118,7 +118,8 @@ async def jira_webhook(request: Request, session: SessionDep) -> dict[str, Any]:
                     client = jira_service.get_jira_client()
                     issue = client.issue(issue_key)
                     issue_content = jira_service._parse_issue(issue)
-                    jira_service._store_issue(issue_content)
+                    # Store vector embedding for the updated issue
+                    jira_service._store_issue_embeddings([issue_content])
                     session.commit()
                     return {
                         "status": "processed",
@@ -141,25 +142,24 @@ async def jira_webhook(request: Request, session: SessionDep) -> dict[str, Any]:
                 "message": "Sprint events are logged but not processed individually",
             }
 
-        elif webhook_event == "user_created" or webhook_event == "user_updated":
-            # User events - could update developer profiles
+        elif webhook_event in ["user_created", "user_updated"]:
+            # User events - update resource profiles
             user_data = payload.get("user")
             if user_data:
                 from datetime import datetime
+                from typing import cast
 
-                from app.api.integrations.Jira.jira_model import DeveloperProfile
+                from app.api.profiles.profile_model import ResourceProfile
 
                 account_id = user_data.get("accountId")
                 display_name = user_data.get("displayName")
                 email = user_data.get("emailAddress")
 
                 if account_id:
-                    from typing import cast
-
                     profile = (
-                        session.query(DeveloperProfile)
+                        session.query(ResourceProfile)
                         .filter(
-                            cast(Any, DeveloperProfile.jira_account_id == account_id)
+                            cast(Any, ResourceProfile.jira_account_id == account_id)
                         )
                         .first()
                     )
@@ -168,25 +168,17 @@ async def jira_webhook(request: Request, session: SessionDep) -> dict[str, Any]:
                         profile.jira_display_name = display_name
                         profile.jira_email = email
                         profile.updated_at = datetime.utcnow()
-                    else:
-                        profile = DeveloperProfile(
-                            jira_account_id=account_id,
-                            jira_display_name=display_name,
-                            jira_email=email,
-                        )
-                        session.add(profile)
-
-                    session.commit()
-                    return {
-                        "status": "processed",
-                        "event": webhook_event,
-                        "account_id": account_id,
-                    }
+                        session.commit()
+                        return {
+                            "status": "processed",
+                            "event": webhook_event,
+                            "account_id": account_id,
+                        }
 
             return {
                 "status": "ignored",
                 "event": webhook_event,
-                "reason": "no user data",
+                "reason": "no matching profile found",
             }
 
         else:

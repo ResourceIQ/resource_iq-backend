@@ -3,6 +3,7 @@
 import logging
 import uuid
 from datetime import datetime
+from typing import Any, TypedDict, cast
 
 from sqlalchemy.orm import Session
 
@@ -15,8 +16,20 @@ logger = logging.getLogger(__name__)
 # Default password for test users (should be changed in production)
 DEFAULT_TEST_PASSWORD = "TestUser123!"
 
+
+class TeamMember(TypedDict):
+    """Type definition for team member data."""
+
+    name: str
+    email: str
+    jira_account_id: str
+    jira_display_name: str
+    github_login: str | None
+    github_id: int | None
+
+
 # Team member data with correct Jira and GitHub mappings
-TEAM_MEMBERS = [
+TEAM_MEMBERS: list[TeamMember] = [
     {
         "name": "Senuja Jayasekara",
         "email": "senuja.20234041@iit.ac.lk",
@@ -72,7 +85,7 @@ def create_or_get_user(
     db: Session, email: str, full_name: str, update_password: bool = True
 ) -> User:
     """Create a user if not exists, or return existing one."""
-    existing = db.query(User).filter(User.email == email).first()
+    existing = db.query(User).filter(cast(Any, User.email == email)).first()
     if existing:
         # Update password if it's a placeholder
         if update_password and existing.hashed_password.startswith("$2b$12$placeholder"):
@@ -110,16 +123,20 @@ def init_test_profiles(db: Session) -> None:
     for member in TEAM_MEMBERS:
         try:
             # Check if profile already exists for this Jira account
-            existing_profile = None
+            existing_profile: ResourceProfile | None = None
             if member["jira_account_id"]:
                 existing_profile = (
                     db.query(ResourceProfile)
                     .filter(
-                        ResourceProfile.jira_account_id == member["jira_account_id"]
+                        cast(
+                            Any,
+                            ResourceProfile.jira_account_id == member["jira_account_id"],
+                        )
                     )
                     .first()
                 )
 
+            profile: ResourceProfile
             if existing_profile:
                 # Update existing profile with correct data
                 profile = existing_profile
@@ -127,7 +144,7 @@ def init_test_profiles(db: Session) -> None:
                 # Get the user
                 user = (
                     db.query(User)
-                    .filter(User.id == existing_profile.user_id)
+                    .filter(cast(Any, User.id == existing_profile.user_id))
                     .first()
                 )
                 if user and user.email != member["email"]:
@@ -141,16 +158,17 @@ def init_test_profiles(db: Session) -> None:
                 user = create_or_get_user(db, member["email"], member["name"])
 
                 # Check if profile exists for this user
-                profile = (
+                existing_user_profile = (
                     db.query(ResourceProfile)
-                    .filter(ResourceProfile.user_id == user.id)
+                    .filter(cast(Any, ResourceProfile.user_id == user.id))
                     .first()
                 )
-                if not profile:
+                if not existing_user_profile:
                     profile = ResourceProfile(user_id=user.id)
                     db.add(profile)
                     profiles_created += 1
                 else:
+                    profile = existing_user_profile
                     profiles_updated += 1
 
             # Update Jira fields
