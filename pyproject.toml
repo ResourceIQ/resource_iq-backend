@@ -25,6 +25,8 @@ dependencies = [
     "pgvector>=0.4.2",
     "sentence-transformers>=5.2.0",
     "torch>=2.9.1",
+    "jira>=3.5.0",
+    "types-requests>=2.32.4.20250913",
 ]
 
 [tool.uv]

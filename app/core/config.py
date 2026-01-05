@@ -129,5 +129,37 @@ class Settings(BaseSettings):
     USE_JINA_API: bool = False
     EMBEDDING_DIMENSION: int = 1536  # Must match database Vector(dim=1536)
 
+    # Jira Integration Settings
+    JIRA_URL: str | None = None  # e.g., https://your-domain.atlassian.net
+    JIRA_EMAIL: str | None = None  # Email associated with Jira API token
+    JIRA_API_TOKEN: str | None = None  # Atlassian API token
+    JIRA_WEBHOOK_SECRET: str | None = None  # Secret for validating Jira webhooks
+
+    # Atlassian OAuth (3LO) for Jira Cloud
+    ATLASSIAN_CLIENT_ID: str | None = None
+    ATLASSIAN_CLIENT_SECRET: str | None = None
+    ATLASSIAN_REDIRECT_URI: HttpUrl | None = None
+    ATLASSIAN_AUTH_URL: HttpUrl | str = "https://auth.atlassian.com/authorize"
+    ATLASSIAN_TOKEN_URL: HttpUrl | str = "https://auth.atlassian.com/oauth/token"
+    ATLASSIAN_API_AUDIENCE: str = "api.atlassian.com"
+    ATLASSIAN_SCOPES: list[str] = [
+        "read:jira-work",
+        "write:jira-work",
+        "read:jira-user",
+        "offline_access",
+    ]
+
+    @property
+    def jira_enabled(self) -> bool:
+        return bool(self.JIRA_URL and self.JIRA_EMAIL and self.JIRA_API_TOKEN)
+
+    @property
+    def jira_oauth_enabled(self) -> bool:
+        return bool(
+            self.ATLASSIAN_CLIENT_ID
+            and self.ATLASSIAN_CLIENT_SECRET
+            and self.ATLASSIAN_REDIRECT_URI
+        )
+
 
 settings = Settings()  # type: ignore
