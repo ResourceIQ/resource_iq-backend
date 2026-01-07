@@ -1,5 +1,3 @@
-from typing import Any
-
 from fastapi import APIRouter, HTTPException
 
 from app.api.integrations.GitHub.github_schema import GitHubUser, PullRequestContent
@@ -10,7 +8,7 @@ router = APIRouter(prefix="/github", tags=["github"])
 
 
 @router.get("/get_developers")
-async def get_developers(session: SessionDep) -> list[dict[str, Any]]:
+async def get_developers(session: SessionDep) -> list[GitHubUser]:
     try:
         github_manager = GithubIntegrationService(session)
         return github_manager.get_all_org_members()

@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field, HttpUrl
 class GitHubUser(BaseModel):
     login: str
     id: int
+    email: str | None = None
+    name: str | None = None
     avatar_url: HttpUrl | None = None
     html_url: HttpUrl | None = None
 

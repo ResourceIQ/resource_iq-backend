@@ -1,6 +1,5 @@
 import logging
 import re
-from typing import Any
 
 from github import Github, GithubIntegration
 from github.PullRequest import PullRequest
@@ -16,9 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class GithubIntegrationService:
-    def __init__(self, db: SessionDep, use_jina_api: bool = True) -> None:
+    def __init__(self, db: SessionDep, use_jina_api: bool | None = None) -> None:
         self.db = db
-        self.use_jina_api = use_jina_api
+        self.use_jina_api = (
+            use_jina_api if use_jina_api is not None else settings.USE_JINA_API
+        )
         self.credentials: GithubOrgIntBaseModel | None = db.query(
             GithubOrgIntBaseModel
         ).first()
@@ -64,7 +65,7 @@ class GithubIntegrationService:
             raise Exception("GitHub integration credentials not found in database")
         return self.credentials.github_install_id
 
-    def get_all_org_members(self) -> list[dict[str, Any]]:
+    def get_all_org_members(self) -> list[GitHubUser]:
         """
         Retrieves all members of the organization with their name and email.
         Note: Email is only returned if it is set to 'Public' by the user.
@@ -81,11 +82,13 @@ class GithubIntegrationService:
                 GitHubUser(
                     login=member.login,
                     id=member.id,
+                    email=member.email,
+                    name=member.name,
                     avatar_url=HttpUrl(member.avatar_url)
                     if member.avatar_url
                     else None,
                     html_url=HttpUrl(member.html_url) if member.html_url else None,
-                ).model_dump()
+                )
             )
 
         return members_list
