@@ -5,9 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.integrations.GitHub.github_schema import GitHubUser
 from app.api.integrations.GitHub.github_service import GithubIntegrationService
-from app.core.config import settings
 from app.utils.deps import SessionDep
 
 router = APIRouter(prefix="/vectors", tags=["Vector Embeddings"])
@@ -58,17 +56,15 @@ async def sync_author_vectors(
 ) -> dict[str, Any]:
     """Sync PR vectors for a specific author."""
     try:
-        service = GithubIntegrationService(session, use_jina_api=settings.USE_JINA_API)
-
+        service = GithubIntegrationService(session)
         # Get org members to find matching user
         members = service.get_all_org_members()
-        author = next((m for m in members if m["login"] == author_login), None)
+        author = next((m for m in members if m.login == author_login), None)
 
         if not author:
             raise HTTPException(status_code=404, detail="Author not found")
 
-        author_obj = GitHubUser(**author)
-        result = service.sync_author_prs_to_vectors(author_obj, max_prs)
+        result = service.sync_author_prs_to_vectors(author, max_prs)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -116,9 +112,7 @@ async def sync_all_vectors(
     # Sync GitHub PRs
     if request.sync_github:
         try:
-            github_service = GithubIntegrationService(
-                session, use_jina_api=settings.USE_JINA_API
-            )
+            github_service = GithubIntegrationService(session)
             github_result = github_service.sync_all_authors_prs_to_vectors(
                 request.github_max_prs_per_author
             )
@@ -132,9 +126,7 @@ async def sync_all_vectors(
         try:
             from app.api.integrations.Jira.jira_service import JiraIntegrationService
 
-            jira_service = JiraIntegrationService(
-                session, use_jina_api=settings.USE_JINA_API
-            )
+            jira_service = JiraIntegrationService(session)
             sync_result = jira_service.sync_issues(
                 project_keys=request.jira_project_keys,
                 max_results=request.jira_max_issues,
@@ -182,7 +174,7 @@ async def search_similar_prs(
 ) -> dict[str, Any]:
     """Search for similar PR contexts (GitHub only)."""
     try:
-        service = GithubIntegrationService(session, use_jina_api=settings.USE_JINA_API)
+        service = GithubIntegrationService(session)
         results = service.vector_service.search_similar_prs(
             query, n_results, author_login
         )
@@ -264,9 +256,7 @@ async def unified_search(
     # Search GitHub PRs
     if request.search_github:
         try:
-            github_service = GithubIntegrationService(
-                session, use_jina_api=settings.USE_JINA_API
-            )
+            github_service = GithubIntegrationService(session)
             github_results = github_service.vector_service.search_similar_prs(
                 request.query,
                 request.n_results,
@@ -293,9 +283,7 @@ async def unified_search(
         try:
             from app.api.integrations.Jira.jira_service import JiraIntegrationService
 
-            jira_service = JiraIntegrationService(
-                session, use_jina_api=settings.USE_JINA_API
-            )
+            jira_service = JiraIntegrationService(session)
             jira_results = jira_service.search_similar_issues(
                 request.query,
                 request.n_results,

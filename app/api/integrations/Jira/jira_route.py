@@ -11,6 +11,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraIssueContent,
     JiraSyncRequest,
     JiraSyncResponse,
+    JiraUser,
 )
 from app.api.integrations.Jira.jira_service import JiraIntegrationService
 from app.api.profiles.profile_model import ResourceProfile
@@ -67,7 +68,7 @@ async def get_projects(session: SessionDep) -> list[dict[str, Any]]:
 async def get_all_jira_users(
     session: SessionDep,
     max_results: int = Query(default=100, ge=1, le=1000),
-) -> list[dict[str, Any]]:
+) -> list[JiraUser]:
     """
     Get all users from Jira Cloud.
     Returns all Atlassian account users (not apps/bots).

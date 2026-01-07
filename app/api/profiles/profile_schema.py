@@ -5,6 +5,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.api.integrations.GitHub.github_schema import GitHubUser
+from app.api.integrations.Jira.jira_schema import JiraUser
+
 
 class ResourceProfileBase(BaseModel):
     """Base schema for resource profile."""
@@ -92,3 +95,11 @@ class UpdateSkillsRequest(BaseModel):
 
     skills: list[str] | None = None
     domains: list[str] | None = None
+
+
+class ProfileMatchResponse(BaseModel):
+    """Response schema for a matched Jira/GitHub profile pair."""
+
+    github_account: GitHubUser
+    jira_account: JiraUser | None = None
+    match_score: float

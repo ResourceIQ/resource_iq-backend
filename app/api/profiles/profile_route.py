@@ -10,11 +10,13 @@ from app.api.profiles.profile_model import ResourceProfile
 from app.api.profiles.profile_schema import (
     GitHubConnectionRequest,
     JiraConnectionRequest,
+    ProfileMatchResponse,
     ProfileWorkload,
     ResourceProfileCreate,
     ResourceProfileResponse,
     UpdateSkillsRequest,
 )
+from app.api.profiles.profile_service import ProfileService
 from app.utils.deps import CurrentUser, SessionDep
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
@@ -189,23 +191,6 @@ async def get_profile_by_github(
     return _to_response(profile)
 
 
-@router.get("/{user_id}", response_model=ResourceProfileResponse)
-async def get_profile(
-    session: SessionDep, user_id: uuid.UUID
-) -> ResourceProfileResponse:
-    """Get a resource profile by user ID."""
-    profile = (
-        session.query(ResourceProfile)
-        .filter(cast(Any, ResourceProfile.user_id == user_id))
-        .first()
-    )
-
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-
-    return _to_response(profile)
-
-
 @router.post("/me/connect/jira", response_model=ResourceProfileResponse)
 async def connect_jira(
     session: SessionDep, current_user: CurrentUser, request: JiraConnectionRequest
@@ -368,5 +353,37 @@ async def update_skills(
     profile.updated_at = datetime.utcnow()
     session.commit()
     session.refresh(profile)
+
+    return _to_response(profile)
+
+
+@router.get("/match-jira-github", response_model=list[ProfileMatchResponse])
+async def match_jira_github_profiles(
+    session: SessionDep,
+    threshold: float = Query(
+        default=75.0, ge=0.0, le=100.0, description="Matching threshold (0-100)"
+    ),
+) -> list[ProfileMatchResponse]:
+    """Match Jira and GitHub accounts into unified resource profiles."""
+
+    profile_service = ProfileService(session)
+    matched_profiles = profile_service.match_jira_github(threshold=threshold)
+    return matched_profiles
+
+
+# Place the dynamic user_id route at the end to avoid shadowing static paths
+@router.get("/{user_id}", response_model=ResourceProfileResponse)
+async def get_profile(
+    session: SessionDep, user_id: uuid.UUID
+) -> ResourceProfileResponse:
+    """Get a resource profile by user ID."""
+    profile = (
+        session.query(ResourceProfile)
+        .filter(cast(Any, ResourceProfile.user_id == user_id))
+        .first()
+    )
+
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
 
     return _to_response(profile)

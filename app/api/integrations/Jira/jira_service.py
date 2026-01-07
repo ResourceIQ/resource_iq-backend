@@ -40,13 +40,24 @@ logger = logging.getLogger(__name__)
 class JiraIntegrationService:
     """Service class for Jira API integration."""
 
-    def __init__(self, db: Session, use_jina_api: bool = True) -> None:
+    def __init__(self, db: Session, use_jina_api: bool | None = None) -> None:
         self.db = db
-        self.vector_service = VectorEmbeddingService(db, use_api=use_jina_api)
+        self.use_jina_api = (
+            use_jina_api if use_jina_api is not None else settings.USE_JINA_API
+        )
+        self._vector_service: VectorEmbeddingService | None = None
         self._client: JIRA | None = None
 
         # Load integration config from database or settings
         self.integration = db.query(JiraOrgIntegration).first()
+
+    @property
+    def vector_service(self) -> VectorEmbeddingService:
+        if not self._vector_service:
+            self._vector_service = VectorEmbeddingService(
+                self.db, use_api=self.use_jina_api
+            )
+        return self._vector_service
 
     @staticmethod
     def _now() -> datetime:
@@ -418,7 +429,7 @@ class JiraIntegrationService:
         except httpx.RequestError as e:
             raise ValueError(f"HTTP error fetching projects: {str(e)}")
 
-    def get_all_jira_users(self, max_results: int = 100) -> list[dict[str, Any]]:
+    def get_all_jira_users(self, max_results: int = 100) -> list[JiraUser]:
         """Retrieve all users from Jira Cloud."""
         client = self.get_jira_client()
 
@@ -450,14 +461,13 @@ class JiraIntegrationService:
 
             users = resp.json()
             return [
-                {
-                    "account_id": u.get("accountId"),
-                    "display_name": u.get("displayName"),
-                    "email": u.get("emailAddress"),
-                    "avatar_url": u.get("avatarUrls", {}).get("48x48"),
-                    "active": u.get("active", True),
-                    "account_type": u.get("accountType"),
-                }
+                JiraUser(
+                    account_id=u.get("accountId"),
+                    display_name=u.get("displayName"),
+                    email_address=u.get("emailAddress"),
+                    avatar_url=u.get("avatarUrls", {}).get("48x48"),
+                    active=u.get("active", True),
+                )
                 for u in users
                 if u.get("accountType") == "atlassian"  # Filter to real users only
             ]
