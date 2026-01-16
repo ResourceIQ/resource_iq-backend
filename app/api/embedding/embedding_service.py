@@ -47,9 +47,12 @@ class VectorEmbeddingService:
     def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings using Jina (API or local)."""
         if self.use_api:
-            return self._generate_embeddings_api(texts)
+            raw_embeddings = self._generate_embeddings_api(texts)
         else:
-            return self._generate_embeddings_local(texts)
+            raw_embeddings = self._generate_embeddings_local(texts)
+
+        # Normalize shape early so downstream callers can assume consistent dimensions
+        return [self._normalize_embedding_dimension(emb) for emb in raw_embeddings]
 
     def _clean_text_for_embedding(self, text: str) -> str:
         """Clean text to remove problematic characters for Jina API."""
@@ -172,9 +175,6 @@ class VectorEmbeddingService:
         # Store in database
         for pr, embedding in zip(pr_contents, embeddings, strict=False):
             try:
-                # Normalize embedding to 1536 dimensions if needed
-                embedding = self._normalize_embedding_dimension(embedding)
-
                 # Check if already exists
                 pr_filter = cast(Any, GitHubPRVector.pr_id == str(pr.id))
                 existing = self.db.query(GitHubPRVector).filter(pr_filter).first()
@@ -246,9 +246,6 @@ class VectorEmbeddingService:
         try:
             # Generate embedding for query
             query_embedding = self.generate_embeddings([query])[0]
-
-            # Normalize embedding to 1536 dimensions
-            query_embedding = self._normalize_embedding_dimension(query_embedding)
 
             # Build query
             query_obj = self.db.query(GitHubPRVector)

@@ -7,6 +7,7 @@ from app.api.embedding import embedding_route
 from app.api.integrations.GitHub import github_route, github_webhook
 from app.api.integrations.Jira import jira_route, jira_webhook
 from app.api.profiles import profile_route
+from app.api.score import score_route
 from app.api.user import user_route
 
 api_router = APIRouter()
@@ -18,3 +19,4 @@ api_router.include_router(github_route.router)
 api_router.include_router(jira_route.router)
 api_router.include_router(jira_webhook.router)
 api_router.include_router(embedding_route.router)
+api_router.include_router(score_route.router)

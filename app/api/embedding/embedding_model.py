@@ -30,3 +30,27 @@ class GitHubPRVector(SQLModel, table=True):
 
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+
+
+class JiraIssueVector(SQLModel, table=True):
+    """Model for storing Jira issue embeddings for NLP/similarity search."""
+
+    __tablename__ = "jira_issue_vectors"
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    id: int | None = Field(default=None, primary_key=True)
+    issue_id: str = Field(unique=True, index=True)
+    issue_key: str = Field(index=True)
+    project_key: str = Field(index=True)
+    assignee_account_id: str | None = Field(default=None, index=True)
+
+    # Vector embedding for similarity search
+    embedding: Vector = Field(sa_column=Column(Vector(dim=1536)))
+
+    # Original context text used for embedding
+    context: str = Field(sa_column=Column(Text))
+    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+
+    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
