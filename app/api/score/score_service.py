@@ -1,32 +1,40 @@
 import logging
+from typing import Any, cast
+from uuid import UUID
 
 import torch
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import desc
+from sqlalchemy.orm import Session
 from torch import cosine_similarity
 
 from app.api.embedding.embedding_model import GitHubPRVector
 from app.api.embedding.embedding_service import VectorEmbeddingService
 from app.api.profiles.profile_model import ResourceProfile
-from app.utils.deps import SessionDep
 
 logger = logging.getLogger(__name__)
 
 class ScoreService:
-    def __init__(self, db: SessionDep):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _calculate_developer_github_score(self, github_id: int, task_tensor: torch.Tensor, threshold: int) -> float:
+    def _calculate_developer_github_score(self, github_id: int, task_embedding: list[float], threshold: int) -> float:
         """
         Calculate a similarity-based score for a GitHub user.
         Returns the average cosine similarity (%) across up to `threshold` PRs.
         """
+        # github_filter = cast(Any, GitHubPRVector.author_id == github_id)
         prs = (
             self.db.query(GitHubPRVector)
             .filter(GitHubPRVector.author_id == github_id)
-            .order_by(GitHubPRVector.pr_id.desc())
+            .order_by(GitHubPRVector.embedding.cosine_distance(task_embedding))
             .limit(threshold)
-            .all()
-        )
+            .all())
 
+        if not prs:
+            return 0.0
+
+        task_tensor = torch.tensor(task_embedding, dtype=torch.float)
         similarities = []
         for pr in prs:
             if pr.embedding is None:
@@ -42,7 +50,7 @@ class ScoreService:
         # Average similarity scaled to percentage
         return float(torch.stack(similarities).mean().item() * 1000)
 
-    def get_best_fits(self, task: str, top_n: int) -> list[tuple[int, float]]:
+    def get_best_fits(self, task: str, top_n: int) -> list[tuple[UUID, float]]:
         """
         Get the top N Resources best suited for the given task.
         Returns a list of tuples (user_id, score).
@@ -59,17 +67,16 @@ class ScoreService:
         # Generate task embedding
         embedding_service = VectorEmbeddingService(self.db)
         task_embedding = embedding_service.generate_embeddings([task])[0]
-        task_tensor = torch.tensor(task_embedding, dtype=torch.float)
 
         # Calculate scores for each profile
-        scores: list[tuple[int, float]] = []
+        scores: list[tuple[UUID, float]] = []
         for profile in profiles:
             if not profile.github_id:
                 continue
             try:
                 score = self._calculate_developer_github_score(
                     github_id=profile.github_id,
-                    task_tensor=task_tensor,
+                    task_embedding=task_embedding,
                     threshold=50,  # Consider up to 50 most recent PRs
                 )
                 scores.append((profile.user_id, score))

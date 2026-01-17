@@ -21,7 +21,7 @@ class GitHubPRVector(SQLModel, table=True):
     pr_title: str
     pr_url: str
 
-    # Note: Vector index should be created separately using HNSW
+    # Vector embedding for similarity search (HNSW index created in migration)
     embedding: Vector = Field(sa_column=Column(Vector(dim=1536)))
 
     # Original context text
