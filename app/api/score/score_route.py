@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, HTTPException, Query
 
 from app.api.score.score_schema import ScoreProfile
@@ -6,6 +5,7 @@ from app.api.score.score_service import ScoreService
 from app.utils.deps import SessionDep
 
 router = APIRouter(prefix="/score", tags=["score"])
+
 
 @router.get("/best-fits")
 def get_best_fits(

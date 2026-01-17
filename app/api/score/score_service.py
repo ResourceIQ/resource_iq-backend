@@ -14,11 +14,14 @@ from app.api.user.user_model import User
 
 logger = logging.getLogger(__name__)
 
+
 class ScoreService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _calculate_developer_github_score(self, github_id: int, task_embedding: list[float], threshold: int) -> tuple[float, list[PrScoreInfo]]:
+    def _calculate_developer_github_score(
+        self, github_id: int, task_embedding: list[float], threshold: int
+    ) -> tuple[float, list[PrScoreInfo]]:
         """
         Calculate a similarity-based score for a GitHub user.
         Returns the average cosine similarity (%) across up to `threshold` PRs.
@@ -29,7 +32,8 @@ class ScoreService:
             .filter(github_filter)
             .order_by(GitHubPRVector.embedding.cosine_distance(task_embedding))
             .limit(threshold)
-            .all())
+            .all()
+        )
 
         if not prs:
             return 0.0, []
@@ -45,10 +49,13 @@ class ScoreService:
             sim = cosine_similarity(task_tensor, pr_tensor, dim=0)
             similarities.append(sim)
 
-            pr_matches.append(PrScoreInfo(
-                pr_title=pr.pr_title,
-                pr_url=pr.pr_url,
-                match_percentage=sim*100.0,))
+            pr_matches.append(
+                PrScoreInfo(
+                    pr_title=pr.pr_title,
+                    pr_url=pr.pr_url,
+                    match_percentage=sim * 100.0,
+                )
+            )
 
         if not similarities:
             return 0.0, []
@@ -63,10 +70,7 @@ class ScoreService:
         Returns a list of tuples (user_id, score).
         """
         # Get all profiles
-        profiles = (
-            self.db.query(ResourceProfile)
-            .all()
-        )
+        profiles = self.db.query(ResourceProfile).all()
 
         if not profiles:
             return []
@@ -80,14 +84,12 @@ class ScoreService:
         for profile in profiles:
             stmt = select(User.full_name).where(User.id == profile.user_id)
             user_name = self.db.execute(stmt).scalar() or "Unknown"
-            score_profile = ScoreProfile(
-                user_id=profile.user_id,
-                user_name=user_name)
+            score_profile = ScoreProfile(user_id=profile.user_id, user_name=user_name)
             if not profile.github_id:
                 continue
             else:
                 try:
-                    github_pr_score , top_prs= self._calculate_developer_github_score(
+                    github_pr_score, top_prs = self._calculate_developer_github_score(
                         github_id=profile.github_id,
                         task_embedding=task_embedding,
                         threshold=50,  # Consider up to 50 most recent PRs
@@ -97,7 +99,9 @@ class ScoreService:
                     scores.append(score_profile)
                 except Exception as e:
                     # Log error but continue with next profile
-                    logger.error(f"Error calculating github_pr_score for user_id {profile.user_id}: {e}")
+                    logger.error(
+                        f"Error calculating github_pr_score for user_id {profile.user_id}: {e}"
+                    )
                     continue
 
         # Sort by score descending and return top N

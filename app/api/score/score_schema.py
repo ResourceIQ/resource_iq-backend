@@ -9,6 +9,7 @@ class PrScoreInfo(SQLModel):
     pr_url: str = ""
     match_percentage: float = 0.0
 
+
 class ScoreProfile(SQLModel):
     user_id: UUID
     user_name: str = ""
