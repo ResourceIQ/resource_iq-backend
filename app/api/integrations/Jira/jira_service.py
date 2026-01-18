@@ -16,9 +16,9 @@ from jira.resources import Issue
 from pydantic import HttpUrl
 from sqlalchemy.orm import Session
 
+from app.api.embedding.embedding_model import JiraIssueVector
 from app.api.embedding.embedding_service import VectorEmbeddingService
 from app.api.integrations.Jira.jira_model import (
-    JiraIssueVector,
     JiraOAuthToken,
     JiraOrgIntegration,
 )

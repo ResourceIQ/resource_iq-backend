@@ -164,7 +164,7 @@ async def get_issue_vectors(
     try:
         from typing import cast as type_cast
 
-        from app.api.integrations.Jira.jira_model import JiraIssueVector
+        from app.api.embedding.embedding_model import JiraIssueVector
 
         query = session.query(JiraIssueVector)
 
@@ -207,7 +207,7 @@ async def get_issue_vector(session: SessionDep, issue_key: str) -> dict[str, Any
     try:
         from typing import cast as type_cast
 
-        from app.api.integrations.Jira.jira_model import JiraIssueVector
+        from app.api.embedding.embedding_model import JiraIssueVector
 
         vector = (
             session.query(JiraIssueVector)
