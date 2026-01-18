@@ -87,22 +87,21 @@ class ScoreService:
             score_profile = ScoreProfile(user_id=profile.user_id, user_name=user_name)
             if not profile.github_id:
                 continue
-            else:
-                try:
-                    github_pr_score, top_prs = self._calculate_developer_github_score(
-                        github_id=profile.github_id,
-                        task_embedding=task_embedding,
-                        threshold=50,  # Consider up to 50 most recent PRs
-                    )
-                    score_profile.github_pr_score = github_pr_score
-                    score_profile.pr_info = top_prs
-                    scores.append(score_profile)
-                except Exception as e:
-                    # Log error but continue with next profile
-                    logger.error(
-                        f"Error calculating github_pr_score for user_id {profile.user_id}: {e}"
-                    )
-                    continue
+            try:
+                github_pr_score, top_prs = self._calculate_developer_github_score(
+                    github_id=profile.github_id,
+                    task_embedding=task_embedding,
+                    threshold=50,  # Consider up to 50 most recent PRs
+                )
+                score_profile.github_pr_score = github_pr_score
+                score_profile.pr_info = top_prs
+                scores.append(score_profile)
+            except Exception as e:
+                # Log error but continue with next profile
+                logger.error(
+                    f"Error calculating github_pr_score for user_id {profile.user_id}: {e}"
+                )
+                continue
 
         # Sort by score descending and return top N
         scores.sort(key=lambda x: x.total_score, reverse=True)
