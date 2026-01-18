@@ -11,7 +11,7 @@ router = APIRouter(prefix="/score", tags=["score"])
 def get_best_fits(
     db: SessionDep,
     task: str = Query(..., description="Task description to find best fits for"),
-    top_n: int = Query(5, description="Number of top developers to return"),
+    top_n: int = Query(5, gt=0, le=100, description="Number of top developers to return"),
 ) -> list[ScoreProfile]:
     """
     Get the top N resource profiles best suited for a given task.
