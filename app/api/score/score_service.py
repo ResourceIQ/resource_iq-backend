@@ -9,7 +9,7 @@ from torch import cosine_similarity
 from app.api.embedding.embedding_model import GitHubPRVector
 from app.api.embedding.embedding_service import VectorEmbeddingService
 from app.api.profiles.profile_model import ResourceProfile
-from app.api.score.score_schema import PrScoreInfo, ScoreProfile
+from app.api.score.score_schema import BestFitInput, PrScoreInfo, ScoreProfile
 from app.api.user.user_model import User
 
 logger = logging.getLogger(__name__)
@@ -64,11 +64,13 @@ class ScoreService:
 
         return final_score, pr_matches[:3]
 
-    def get_best_fits(self, task: str, top_n: int) -> list[ScoreProfile]:
+    def get_best_fits(self, best_fit_input: BestFitInput) -> list[ScoreProfile]:
         """
         Get the top N Resources best suited for the given task.
         Returns a list of tuples (user_id, score).
         """
+        task = f"{best_fit_input.task_title}\n\n{best_fit_input.task_description}"
+        top_n = best_fit_input.max_results
         # Get all profiles
         profiles = self.db.query(ResourceProfile).all()
 

@@ -1,8 +1,13 @@
 from uuid import UUID
 
 from pydantic import computed_field
-from sqlmodel import SQLModel
+from sqlmodel import Field, SQLModel
 
+
+class BestFitInput(SQLModel):
+    task_title: str
+    task_description: str = ""
+    max_results: int = Field(default=5, gt=0, le=100)
 
 class PrScoreInfo(SQLModel):
     pr_title: str = ""
