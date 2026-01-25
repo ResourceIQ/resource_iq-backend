@@ -88,7 +88,9 @@ class ScoreService:
         for profile in profiles:
             stmt = select(User.full_name).where(User.id == profile.user_id)
             user_name = self.db.execute(stmt).scalar() or "Unknown"
-            score_profile = ScoreProfile(user_id=profile.user_id, user_name=user_name)
+            score_profile = ScoreProfile(
+                user_id=profile.user_id, user_name=user_name, position=profile.position
+            )
             if not profile.github_id:
                 continue
             try:

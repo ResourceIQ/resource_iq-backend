@@ -164,6 +164,7 @@ async def sync_all_vectors(
         errors=errors,
     )
 
+
 class UnifiedSearchRequest(BaseModel):
     """Request schema for unified search across all sources."""
 
@@ -208,92 +209,3 @@ class UnifiedSearchResponse(BaseModel):
     github_results: int
     jira_results: int
     results: list[SearchResult]
-
-
-@router.post("/search/unified", response_model=UnifiedSearchResponse)
-async def unified_search(
-    session: SessionDep,
-    request: UnifiedSearchRequest,
-) -> UnifiedSearchResponse:
-    """
-    Unified semantic search across GitHub PRs and Jira issues.
-
-    This endpoint searches both GitHub and Jira vectors and returns
-    combined results sorted by relevance.
-
-    **Request body:**
-    - `query`: Search query text (required)
-    - `n_results`: Max results to return (default: 10)
-    - `search_github`: Include GitHub PRs (default: true)
-    - `search_jira`: Include Jira issues (default: true)
-    - `github_author_login`: Filter by GitHub author (optional)
-    - `jira_project_key`: Filter by Jira project (optional)
-    - `jira_assignee_id`: Filter by Jira assignee (optional)
-    """
-    results: list[SearchResult] = []
-    github_count = 0
-    jira_count = 0
-
-    # Search GitHub PRs
-    if request.search_github:
-        try:
-            github_service = GithubIntegrationService(session)
-            github_results = github_service.vector_service.search_similar_prs(
-                request.query,
-                request.n_results,
-                request.github_author_login,
-            )
-            for r in github_results:
-                results.append(
-                    SearchResult(
-                        source="github",
-                        id=r["pr_id"],
-                        title=r["pr_title"],
-                        url=r["pr_url"],
-                        author=r["author_login"],
-                        context=r["context"][:500] if r["context"] else "",
-                        created_at=r.get("created_at"),
-                    )
-                )
-            github_count = len(github_results)
-        except Exception:
-            pass  # GitHub not configured or no results
-
-    # Search Jira Issues
-    if request.search_jira:
-        try:
-            from app.api.integrations.Jira.jira_service import JiraIntegrationService
-
-            jira_service = JiraIntegrationService(session)
-            jira_results = jira_service.search_similar_issues(
-                request.query,
-                request.n_results,
-                request.jira_project_key,
-                request.jira_assignee_id,
-            )
-            for r in jira_results:
-                results.append(
-                    SearchResult(
-                        source="jira",
-                        id=r["issue_id"],
-                        title=r["issue_key"],
-                        url=None,  # URL not stored in vector table
-                        author=r.get("assignee_account_id"),
-                        context=r["context"][:500] if r["context"] else "",
-                        created_at=r.get("created_at"),
-                    )
-                )
-            jira_count = len(jira_results)
-        except Exception:
-            pass  # Jira not configured or no results
-
-    # Limit total results
-    results = results[: request.n_results]
-
-    return UnifiedSearchResponse(
-        query=request.query,
-        total_results=len(results),
-        github_results=github_count,
-        jira_results=jira_count,
-        results=results,
-    )

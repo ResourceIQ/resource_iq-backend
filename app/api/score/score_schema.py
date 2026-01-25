@@ -9,6 +9,7 @@ class BestFitInput(SQLModel):
     task_description: str = ""
     max_results: int = Field(default=5, gt=0, le=100)
 
+
 class PrScoreInfo(SQLModel):
     pr_id: int
     pr_title: str = ""
@@ -19,7 +20,8 @@ class PrScoreInfo(SQLModel):
 
 class ScoreProfile(SQLModel):
     user_id: UUID
-    user_name: str = ""
+    user_name: str | None = None
+    position: str | None = None
     github_pr_score: float = 0.0
     jira_issue_score: float = 0.0
     pr_info: list[PrScoreInfo] = []

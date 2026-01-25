@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 
 from app.api.score.score_schema import BestFitInput, ScoreProfile
 from app.api.score.score_service import ScoreService
