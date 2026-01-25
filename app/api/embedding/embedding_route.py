@@ -164,25 +164,6 @@ async def sync_all_vectors(
         errors=errors,
     )
 
-
-@router.post("/search")
-async def search_similar_prs(
-    session: SessionDep,
-    query: str,
-    n_results: int = 5,
-    author_login: str | None = None,
-) -> dict[str, Any]:
-    """Search for similar PR contexts (GitHub only)."""
-    try:
-        service = GithubIntegrationService(session)
-        results = service.vector_service.search_similar_prs(
-            query, n_results, author_login
-        )
-        return {"results": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 class UnifiedSearchRequest(BaseModel):
     """Request schema for unified search across all sources."""
 

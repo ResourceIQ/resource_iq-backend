@@ -10,7 +10,9 @@ class BestFitInput(SQLModel):
     max_results: int = Field(default=5, gt=0, le=100)
 
 class PrScoreInfo(SQLModel):
+    pr_id: int
     pr_title: str = ""
+    pr_description: str = ""
     pr_url: str = ""
     match_percentage: float = 0.0
 

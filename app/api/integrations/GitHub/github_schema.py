@@ -14,6 +14,7 @@ class PullRequestContent(BaseModel):
     id: int
     number: int
     title: str
+    body: str | None = None
     context: str | None = None
     html_url: HttpUrl
 

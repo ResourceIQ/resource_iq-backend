@@ -185,6 +185,7 @@ class VectorEmbeddingService:
                     existing.context = pr.context or ""
                     existing.pr_url = str(pr.html_url)
                     existing.pr_title = pr.title
+                    existing.pr_description = pr.body or ""
                     logger.debug(f"Updated PR {pr.number}")
                 else:
                     # Create new
@@ -195,6 +196,7 @@ class VectorEmbeddingService:
                         author_id=pr.author.id,
                         pr_title=pr.title,
                         pr_url=str(pr.html_url),
+                        pr_description=pr.body or "",
                         embedding=embedding,
                         context=pr.context or "",
                     )
@@ -238,50 +240,3 @@ class VectorEmbeddingService:
                 total_stored += len(pr_contents)
 
         logger.info(f"Total PRs stored: {total_stored}")
-
-    def search_similar_prs(
-        self, query: str, n_results: int = 5, author_login: str | None = None
-    ) -> list[dict[str, Any]]:
-        """Search for similar PR contexts using vector similarity."""
-        try:
-            # Generate embedding for query
-            query_embedding = self.generate_embeddings([query])[0]
-
-            # Build query
-            query_obj = self.db.query(GitHubPRVector)
-
-            # Filter by author if specified
-            if author_login:
-                author_filter = cast(Any, GitHubPRVector.author_login == author_login)
-                query_obj = query_obj.filter(author_filter)
-
-            # Order by similarity (using <-> operator for pgvector)
-            # <-> is the L2 distance operator
-            results = (
-                query_obj.order_by(
-                    GitHubPRVector.embedding.l2_distance(query_embedding)
-                )
-                .limit(n_results)
-                .all()
-            )
-
-            # Format results
-            formatted_results = [
-                {
-                    "pr_id": r.pr_id,
-                    "pr_number": r.pr_number,
-                    "pr_title": r.pr_title,
-                    "pr_url": r.pr_url,
-                    "author_login": r.author_login,
-                    "context": r.context,
-                    "created_at": r.created_at.isoformat() if r.created_at else None,
-                }
-                for r in results
-            ]
-
-            logger.info(f"Found {len(formatted_results)} similar PRs")
-            return formatted_results
-
-        except Exception as e:
-            logger.error(f"Error searching similar PRs: {str(e)}")
-            raise

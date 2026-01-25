@@ -51,8 +51,10 @@ class ScoreService:
 
             pr_matches.append(
                 PrScoreInfo(
+                    pr_id=pr.pr_id,
                     pr_title=pr.pr_title,
                     pr_url=pr.pr_url,
+                    pr_description=pr.pr_description,
                     match_percentage=sim * 100.0,
                 )
             )
