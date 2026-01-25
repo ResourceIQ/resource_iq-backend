@@ -24,7 +24,9 @@ class ResourceProfile(SQLModel, table=True):
         foreign_key="user.id",
         description="ResourceIQ user UUID (1-to-1 relationship)",
     )
-
+    position: str | None = Field(
+        default=None, description="Job position/title of the resource"
+    )
     # === Jira Integration (optional) ===
     jira_account_id: str | None = Field(
         default=None,

@@ -1,19 +1,16 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 
-from app.api.score.score_schema import ScoreProfile
+from app.api.score.score_schema import BestFitInput, ScoreProfile
 from app.api.score.score_service import ScoreService
 from app.utils.deps import SessionDep
 
 router = APIRouter(prefix="/score", tags=["score"])
 
 
-@router.get("/best-fits")
+@router.post("/best-fits")
 def get_best_fits(
     db: SessionDep,
-    task: str = Query(..., description="Task description to find best fits for"),
-    top_n: int = Query(
-        5, gt=0, le=100, description="Number of top developers to return"
-    ),
+    best_fit_input: BestFitInput,
 ) -> list[ScoreProfile]:
     """
     Get the top N resource profiles best suited for a given task.
@@ -27,7 +24,7 @@ def get_best_fits(
     """
     try:
         score_service = ScoreService(db)
-        results = score_service.get_best_fits(task=task, top_n=top_n)
+        results = score_service.get_best_fits(best_fit_input=best_fit_input)
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

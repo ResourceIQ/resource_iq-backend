@@ -5,10 +5,10 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.api.user import user_service
-from app.core.config import settings
-from app.core.security import verify_password
 from app.api.user.user_model import User
 from app.api.user.user_schema import UserCreate
+from app.core.config import settings
+from app.core.security import verify_password
 from tests.utils.utils import random_email, random_lower_string
 
 

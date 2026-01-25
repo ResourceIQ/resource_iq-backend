@@ -121,6 +121,8 @@ class GithubIntegrationService:
             r"<!--.*?-->", "", pr.body or "", flags=re.DOTALL
         ).strip()
 
+        pr_content.body = clean_description
+
         header = (
             f"PR_INTENT: {pr.title}\n"
             f"DESCRIPTION: {clean_description[:1000]}\n"
