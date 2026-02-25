@@ -16,6 +16,7 @@ class PullRequestContent(BaseModel):
     title: str
     body: str | None = None
     context: str | None = None
+    changed_files: list[str] = Field(default_factory=list, description="List of changed file paths", nullable=True)
     html_url: HttpUrl
 
     # Author information

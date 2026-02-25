@@ -94,7 +94,7 @@ class GithubIntegrationService:
         return members_list
 
     def generate_pr_context(
-        self, pr: PullRequest, include_diffs: bool = False, max_tokens: int = 8000
+        self, pr: PullRequest, max_tokens: int = 8000
     ) -> PullRequestContent:
         """
         Generates a structured context string from a pull request.
@@ -133,9 +133,11 @@ class GithubIntegrationService:
         files = pr.get_files()
 
         body = "\nFILE_CHANGES:\n"
+        files_list = []
         for f in files:
             status = f.status  # 'added', 'removed', 'modified', 'renamed'
             body += f"- [{status.upper()}] {f.filename}\n"
+            files_list.append(f.filename)
 
         body += "\nCOMMITS:\n"
         for commit in pr.get_commits():
@@ -145,6 +147,7 @@ class GithubIntegrationService:
                 body += f"- {commit_message.splitlines()[0]}\n"
 
         pr_content.context = header + body
+        pr_content.changed_files = files_list
         return pr_content
 
     def get_org_closed_prs_context_by_author(
@@ -246,3 +249,24 @@ class GithubIntegrationService:
             "total_authors": len(authors_prs),
             "total_prs": sum(len(prs) for prs in authors_prs.values()),
         }
+
+    def create_graph_context_from_pr(
+        self, pr: PullRequest, include_diffs: bool = False, max_tokens: int = 8000
+    ) -> str:
+        """
+        Creates a graph context string from a pull request.
+        This is a simplified version focusing on key elements for graph representation.
+        """
+        pr_content = self.generate_pr_context(
+            pr, max_tokens=max_tokens
+        )
+
+        graph_context = (
+            f"PR #{pr_content.number}: {pr_content.title}\n"
+            f"Author: {pr_content.author.login}\n"
+            f"URL: {pr_content.html_url}\n"
+            f"Description: {pr_content.body[:500]}\n"
+            f"Context Summary:\n{pr_content.context[:max_tokens]}"
+        )
+
+        return graph_context

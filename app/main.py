@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from neomodel import config as neomodel_config
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
@@ -20,6 +21,11 @@ def custom_generate_unique_id(route: APIRoute) -> str:
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup and shutdown events."""
+    if settings.neo4j_enabled:
+        neomodel_config.DATABASE_URL = settings.neo4j_dsn
+        if settings.NEO4J_DATABASE:
+            neomodel_config.DATABASE_NAME = settings.NEO4J_DATABASE
+
     # Startup: Initialize test profiles
     # logger.info("Starting up - initializing test profiles...")
     # try:
