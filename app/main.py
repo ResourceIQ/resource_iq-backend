@@ -12,6 +12,7 @@ from app.api.main import api_router
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:

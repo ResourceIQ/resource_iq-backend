@@ -14,7 +14,7 @@ class SimilarityRel(StructuredRel):
     score = FloatProperty(required=True)
 
 # --- Node Models ---
-class Author(StructuredNode):
+class Resource(StructuredNode):
     login = StringProperty(unique_index=True, required=True)
 
 class Component(StructuredNode):
@@ -42,7 +42,7 @@ class JiraIssue(StructuredNode):
     components = RelationshipTo('Component', 'HAS_COMPONENT')
 
 class PR(StructuredNode):
-    id = IntegerProperty(unique_index=True, required=True)
+    identifier = IntegerProperty(unique_index=True, required=True)
     number = IntegerProperty()
     title = StringProperty()
     url = StringProperty()
@@ -50,9 +50,8 @@ class PR(StructuredNode):
     repo = StringProperty()
 
     # Relationships mapping out from PR
-    author = RelationshipTo('Author', 'AUTHORED_BY')
+    author = RelationshipTo('Resource', 'AUTHORED_BY')
     repo_component = RelationshipTo('Component', 'IN_REPO')
     modified_files = RelationshipTo('File', 'MODIFIES')
     labels = RelationshipTo('Label', 'HAS_LABEL')
-    resolves = RelationshipTo('JiraIssue', 'RESOLVES')
     similar_to = RelationshipTo('PR', 'SIMILAR_TO', model=SimilarityRel)

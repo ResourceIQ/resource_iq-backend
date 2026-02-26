@@ -14,6 +14,8 @@ class GitHubPRVector(SQLModel, table=True):
     model_config = {"arbitrary_types_allowed": True}
 
     id: int | None = Field(default=None, primary_key=True)
+    repo_id: int = Field(index=True)
+    repo_name: str
     pr_id: str = Field(unique=True, index=True)
     pr_number: int
     author_login: str = Field(index=True)

@@ -114,6 +114,8 @@ class GithubIntegrationService:
             title=pr.title,
             html_url=HttpUrl(pr.html_url),
             author=author,
+            repo_id=pr.base.repo.id,
+            repo_name=pr.base.repo.name,
         )
 
         # 1. Header: Intent & Impact
@@ -129,8 +131,8 @@ class GithubIntegrationService:
             f"LABELS: {', '.join([label.name for label in pr.labels])}\n"
         )
 
-        # 2. Body: File Changes Summary
         files = pr.get_files()
+        pr_content.labels = [label.name for label in pr.labels]
 
         body = "\nFILE_CHANGES:\n"
         files_list = []

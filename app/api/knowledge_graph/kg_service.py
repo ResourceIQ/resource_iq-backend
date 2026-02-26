@@ -3,12 +3,12 @@ import re
 from app.api.integrations.GitHub.github_schema import PullRequestContent
 from app.api.knowledge_graph.kg_model import (
     PR,
-    Author,
     Component,
     Epic,
     File,
     JiraIssue,
     Label,
+    Resource,
 )
 
 
@@ -17,7 +17,7 @@ class KnowledgeGraphService:
         # 1. Upsert PR node (create_or_update returns a list, so we grab the first element)
         pr_node = PR.create_or_update(
             {
-                "id": pr.id,
+                "identifier": pr.id,
                 "number": pr.number,
                 "title": pr.title,
                 "url": str(pr.html_url),
@@ -27,7 +27,7 @@ class KnowledgeGraphService:
         )[0]
 
         # 2. Upsert Author & Connect
-        author_node = Author.create_or_update({"login": pr.author.login})[0]
+        author_node = Resource.create_or_update({"login": pr.author.login})[0]
         pr_node.author.connect(author_node)
 
         # 3. Upsert Component (repo) & Connect
@@ -40,7 +40,7 @@ class KnowledgeGraphService:
             pr_node.modified_files.connect(file_node)
 
         # 5. Upsert Labels & Connect
-        labels = self._extract_labels_from_context(pr.context or "")
+        labels = pr.labels or self._extract_labels_from_context(pr.context or "")
         for label_name in labels:
             label_node = Label.create_or_update({"name": label_name})[0]
             pr_node.labels.connect(label_node)
@@ -72,7 +72,7 @@ class KnowledgeGraphService:
     def link_pr_to_jira(self, pr_id: int, issue_key: str):
         """Call this when a Jira issue key is detected in a PR branch/title/commits."""
         # nodes.get() fetches the node based on its unique index
-        pr_node = PR.nodes.get(id=pr_id)
+        pr_node = PR.nodes.get(identifier=pr_id)
         issue_node = JiraIssue.nodes.get(key=issue_key)
 
         pr_node.resolves.connect(issue_node)
@@ -80,8 +80,8 @@ class KnowledgeGraphService:
     def add_similar_pr_edges(self, pairs: list[tuple[int, int, float]]):
         """Add SIMILAR_TO edges from embedding clustering."""
         for pr_id_a, pr_id_b, score in pairs:
-            pr_a = PR.nodes.get(id=pr_id_a)
-            pr_b = PR.nodes.get(id=pr_id_b)
+            pr_a = PR.nodes.get(identifier=pr_id_a)
+            pr_b = PR.nodes.get(identifier=pr_id_b)
 
             # Connect and pass the relationship property
             pr_a.similar_to.connect(pr_b, {"score": score})

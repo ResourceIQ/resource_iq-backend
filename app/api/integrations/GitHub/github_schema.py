@@ -16,6 +16,9 @@ class PullRequestContent(BaseModel):
     title: str
     body: str | None = None
     context: str | None = None
+    repo_id: int
+    repo_name: str | None = None
+    labels: list[str] = []
     changed_files: list[str] = Field(default_factory=list, description="List of changed file paths", nullable=True)
     html_url: HttpUrl
 
