@@ -1,20 +1,16 @@
 import logging
-from typing import TypedDict
+from typing import cast
 
+from pydantic import HttpUrl
 from sqlmodel import Session, select
 
 from app.api.embedding.embedding_model import GitHubPRVector
 from app.api.integrations.GitHub.github_schema import GitHubUser, PullRequestContent
+from app.api.knowledge_graph.kg_schema import KGBuildResult
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
 from app.api.profiles.profile_model import ResourceProfile
 
 logger = logging.getLogger(__name__)
-
-
-class KGBuildResult(TypedDict):
-    prs_processed: int
-    profiles_updated: int
-    errors: list[str]
 
 
 class KGBuildService:
@@ -63,7 +59,7 @@ class KGBuildService:
                             number=pr.pr_number,
                             title=pr.pr_title,
                             body=pr.pr_description,
-                            html_url=pr.pr_url,
+                            html_url=cast(HttpUrl, pr.pr_url),
                             repo_id=pr.repo_id,
                             repo_name=pr.repo_name,
                             changed_files=(pr.metadata_json or {}).get(

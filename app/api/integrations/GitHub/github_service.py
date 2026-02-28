@@ -251,22 +251,3 @@ class GithubIntegrationService:
             "total_authors": len(authors_prs),
             "total_prs": sum(len(prs) for prs in authors_prs.values()),
         }
-
-    def create_graph_context_from_pr(
-        self, pr: PullRequest, include_diffs: bool = False, max_tokens: int = 8000
-    ) -> str:
-        """
-        Creates a graph context string from a pull request.
-        This is a simplified version focusing on key elements for graph representation.
-        """
-        pr_content = self.generate_pr_context(pr, max_tokens=max_tokens)
-
-        graph_context = (
-            f"PR #{pr_content.number}: {pr_content.title}\n"
-            f"Author: {pr_content.author.login}\n"
-            f"URL: {pr_content.html_url}\n"
-            f"Description: {pr_content.body[:500]}\n"
-            f"Context Summary:\n{pr_content.context[:max_tokens]}"
-        )
-
-        return graph_context

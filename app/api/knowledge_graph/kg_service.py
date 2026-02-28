@@ -1,5 +1,5 @@
 import re
-from typing import Any, TypedDict
+from typing import Any
 
 from app.api.integrations.GitHub.github_schema import PullRequestContent
 from app.api.knowledge_graph.kg_model import (
@@ -11,16 +11,7 @@ from app.api.knowledge_graph.kg_model import (
     Label,
     Resource,
 )
-
-
-class JiraIssueContent(TypedDict):
-    key: str
-    summary: str
-    status: str
-    epic_key: str | None
-    epic_summary: str | None
-    url: str
-    components: list[str] | None
+from app.api.knowledge_graph.kg_schema import JiraIssueContent
 
 
 class KnowledgeGraphService:

@@ -1,3 +1,5 @@
+# mypy: disable-error-code=attr-defined
+
 # app/models/graph_models.py
 from neomodel import (
     FloatProperty,
@@ -6,7 +8,7 @@ from neomodel import (
     StringProperty,
     StructuredNode,
     StructuredRel,
-)  # type: ignore[attr-defined]
+)
 
 
 # --- Relationship Models ---

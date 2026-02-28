@@ -23,9 +23,9 @@ def custom_generate_unique_id(route: APIRoute) -> str:
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup and shutdown events."""
     if settings.neo4j_enabled:
-        neomodel_config.DATABASE_URL = settings.neo4j_dsn
+        neomodel_config.DATABASE_URL = settings.neo4j_dsn  # type: ignore[attr-defined]
         if settings.NEO4J_DATABASE:
-            neomodel_config.DATABASE_NAME = settings.NEO4J_DATABASE
+            neomodel_config.DATABASE_NAME = settings.NEO4J_DATABASE  # type: ignore[attr-defined]
 
     # Startup: Initialize test profiles
     # logger.info("Starting up - initializing test profiles...")
