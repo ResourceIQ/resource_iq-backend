@@ -89,6 +89,14 @@ JIRA_WEBHOOK_SECRET=optional_webhook_secret
 # Jina Embeddings API
 JINA_API_KEY=your_jina_api_key
 USE_JINA_API=true
+
+# Neo4j (Knowledge Graph)
+NEO4J_SCHEME=bolt
+NEO4J_HOST=localhost
+NEO4J_PORT=7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=changethis
+NEO4J_DATABASE=neo4j
 ```
 
 **Important:** Change `changethis` values to secure passwords. Generate secret keys with:

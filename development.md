@@ -44,6 +44,14 @@ POSTGRES_PASSWORD=your-postgres-password
 # First superuser
 FIRST_SUPERUSER=admin@example.com
 FIRST_SUPERUSER_PASSWORD=your-admin-password
+
+# Neo4j (Knowledge Graph)
+NEO4J_SCHEME=bolt
+NEO4J_HOST=localhost
+NEO4J_PORT=7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=changethis
+NEO4J_DATABASE=neo4j
 ```
 
 5. **Set up PostgreSQL**
