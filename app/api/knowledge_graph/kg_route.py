@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter
 
 from app.api.knowledge_graph.kg_build_service import KGBuildService
@@ -7,10 +6,11 @@ from app.utils.deps import SessionDep
 
 router = APIRouter(prefix="/kg", tags=["knowledge_graph"])
 
+
 @router.post("/graph/build")
 async def build_knowledge_graph(
     session: SessionDep,
-    author_login: str | None = None,   # optional: rebuild for one author only
+    author_login: str | None = None,  # optional: rebuild for one author only
 ) -> dict:
     """
     Build the knowledge graph from already-synced PR vectors.

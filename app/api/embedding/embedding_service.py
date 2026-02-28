@@ -204,7 +204,7 @@ class VectorEmbeddingService:
                         metadata_json={
                             "changed_files": pr.changed_files or [],
                             "labels": pr.labels or [],
-                        }
+                        },
                     )
                     self.db.add(db_pr_vector)
                     logger.debug(f"Created PR {pr.number}")

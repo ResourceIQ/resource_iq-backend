@@ -259,9 +259,7 @@ class GithubIntegrationService:
         Creates a graph context string from a pull request.
         This is a simplified version focusing on key elements for graph representation.
         """
-        pr_content = self.generate_pr_context(
-            pr, max_tokens=max_tokens
-        )
+        pr_content = self.generate_pr_context(pr, max_tokens=max_tokens)
 
         graph_context = (
             f"PR #{pr_content.number}: {pr_content.title}\n"
