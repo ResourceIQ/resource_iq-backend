@@ -17,7 +17,7 @@ services:
       - db_network
 
   neo4j:
-    image: neo4j:5
+    image: neo4j:2026
     container_name: neo4j_db
     environment:
       - NEO4J_AUTH=neo4j/changethis
