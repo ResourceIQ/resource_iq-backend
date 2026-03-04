@@ -1,3 +1,11 @@
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
 [project]
 name = "app"
 version = "0.1.0"
@@ -26,18 +34,19 @@ dependencies = [
     "sentence-transformers>=5.2.0",
     "torch>=2.9.1",
     "jira>=3.5.0",
-    "types-requests>=2.32.4.20250913",
+    "requests>=2.32.0",
     "thefuzz>=0.22.1",
     "neomodel>=6.0.1",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest<8.0.0,>=7.4.3",
     "mypy<2.0.0,>=1.8.0",
     "ruff<1.0.0,>=0.2.2",
     "pre-commit<4.0.0,>=3.6.2",
     "types-passlib<2.0.0.0,>=1.7.7.20240106",
+    "types-requests>=2.32.4.20250913",
     "coverage<8.0.0,>=7.4.3",
 ]
 
