@@ -1,4 +1,4 @@
-from thefuzz import fuzz  # type: ignore[import-untyped]
+from thefuzz import fuzz
 
 from app.api.integrations.GitHub.github_schema import GitHubUser
 from app.api.integrations.GitHub.github_service import GithubIntegrationService
