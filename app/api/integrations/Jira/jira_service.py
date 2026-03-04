@@ -28,6 +28,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraAuthConnectResponse,
     JiraComment,
     JiraIssueContent,
+    JiraOpenIssue,
     JiraSyncResponse,
     JiraUser,
 )
@@ -615,6 +616,52 @@ class JiraIntegrationService:
         )
 
         return list(issues)
+
+    def get_open_issues(
+        self,
+        project_key: str | None = None,
+        max_results: int = 100,
+    ) -> list[JiraOpenIssue]:
+        """
+        Fetch all open (non-Done/Closed/Resolved) Jira issues.
+
+        Returns a lightweight list containing issue_id, issue_key,
+        title (summary), description, status, and priority.
+
+        Args:
+            project_key: Optionally restrict to a single project.
+            max_results: Maximum number of issues to return.
+        """
+        jql_parts = ['status NOT IN ("Done", "Closed", "Resolved")']
+        if project_key:
+            jql_parts.insert(0, f'project = "{project_key}"')
+        jql = " AND ".join(jql_parts) + " ORDER BY created DESC"
+
+        issues = self.fetch_issues(
+            jql=jql,
+            max_results=max_results,
+            include_closed=False,
+        )
+
+        result: list[JiraOpenIssue] = []
+        for issue in issues:
+            fields = issue.fields
+            raw_desc = getattr(fields, "description", None)
+            # Jira Cloud returns ADF (dict) for description; fall back to None
+            description: str | None = raw_desc if isinstance(raw_desc, str) else None
+
+            result.append(
+                JiraOpenIssue(
+                    issue_id=issue.id,
+                    issue_key=issue.key,
+                    title=fields.summary,
+                    description=description,
+                    status=fields.status.name if fields.status else "Unknown",
+                    priority=fields.priority.name if fields.priority else None,
+                )
+            )
+
+        return result
 
     def _parse_jira_user(self, user_data: Any) -> JiraUser | None:
         """Parse Jira user object into JiraUser schema."""

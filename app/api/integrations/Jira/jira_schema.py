@@ -35,6 +35,17 @@ class JiraIssueStatus(str, Enum):
     OPEN = "Open"
 
 
+class JiraOpenIssue(BaseModel):
+    """Lightweight schema for a single open Jira issue."""
+
+    issue_id: str = Field(..., description="Internal Jira issue ID (numeric string)")
+    issue_key: str = Field(..., description="Human-readable issue key, e.g. PROJ-42")
+    title: str = Field(..., description="Issue summary / title")
+    description: str | None = Field(default=None, description="Issue description text")
+    status: str = Field(..., description="Current issue status")
+    priority: str | None = Field(default=None, description="Issue priority level")
+
+
 class JiraUser(BaseModel):
     """Schema for Jira user information."""
 
@@ -186,3 +197,12 @@ class UserMappingResponse(BaseModel):
     github_id: int | None
     internal_user_id: str | None
     mapped: bool
+
+class JiraOpenIssue(BaseModel):
+    """Lightweight schema for an open Jira issue."""
+    issue_id:str
+    issue_key :str 
+    title: str
+    description : str | None =None
+    status : str 
+    priority : str | None = None
