@@ -194,11 +194,17 @@ class VectorEmbeddingService:
                         pr_number=pr.number,
                         author_login=pr.author.login,
                         author_id=pr.author.id,
+                        repo_id=pr.repo_id,
+                        repo_name=pr.repo_name or "",
                         pr_title=pr.title,
                         pr_url=str(pr.html_url),
                         pr_description=pr.body or "",
                         embedding=embedding,
                         context=pr.context or "",
+                        metadata_json={
+                            "changed_files": pr.changed_files or [],
+                            "labels": pr.labels or [],
+                        },
                     )
                     self.db.add(db_pr_vector)
                     logger.debug(f"Created PR {pr.number}")

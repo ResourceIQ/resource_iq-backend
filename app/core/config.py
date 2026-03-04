@@ -59,6 +59,14 @@ class Settings(BaseSettings):
         "prefer"  # Options: disable, allow, prefer, require, verify-ca, verify-full
     )
 
+    # Neo4j (Knowledge Graph)
+    NEO4J_SCHEME: str = "neo4j+s"
+    NEO4J_HOST: str = "localhost"
+    NEO4J_PORT: int = 7687
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str | None = None
+    NEO4J_DATABASE: str | None = None
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
@@ -70,6 +78,19 @@ class Settings(BaseSettings):
             port=self.POSTGRES_PORT,
             path=self.POSTGRES_DB,
         )
+
+    @property
+    def neo4j_dsn(self) -> str | None:
+        if not self.NEO4J_PASSWORD:
+            return None
+        return (
+            f"{self.NEO4J_SCHEME}://{self.NEO4J_USER}:{self.NEO4J_PASSWORD}"
+            f"@{self.NEO4J_HOST}:{self.NEO4J_PORT}"
+        )
+
+    @property
+    def neo4j_enabled(self) -> bool:
+        return bool(self.neo4j_dsn)
 
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False

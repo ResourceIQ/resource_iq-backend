@@ -16,6 +16,17 @@ services:
     networks:
       - db_network
 
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j_db
+    environment:
+      - NEO4J_AUTH=neo4j/changethis
+    ports:
+      - "7474:7474"  # Browser UI
+      - "7687:7687"  # Bolt protocol
+    networks:
+      - db_network
+
   pgadmin:
     image: dpage/pgadmin4
     container_name: pgadmin_gui

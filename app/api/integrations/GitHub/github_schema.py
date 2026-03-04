@@ -16,6 +16,13 @@ class PullRequestContent(BaseModel):
     title: str
     body: str | None = None
     context: str | None = None
+    repo_id: int
+    repo_name: str | None = None
+    labels: list[str] = Field(default_factory=list)
+    changed_files: list[str] = Field(
+        default_factory=list,
+        description="List of changed file paths",
+    )
     html_url: HttpUrl
 
     # Author information

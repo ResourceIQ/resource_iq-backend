@@ -28,6 +28,7 @@ dependencies = [
     "jira>=3.5.0",
     "types-requests>=2.32.4.20250913",
     "thefuzz>=0.22.1",
+    "neomodel>=6.0.1",
 ]
 
 [tool.uv]

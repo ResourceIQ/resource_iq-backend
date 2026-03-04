@@ -94,7 +94,7 @@ class GithubIntegrationService:
         return members_list
 
     def generate_pr_context(
-        self, pr: PullRequest, include_diffs: bool = False, max_tokens: int = 8000
+        self, pr: PullRequest, max_tokens: int = 8000
     ) -> PullRequestContent:
         """
         Generates a structured context string from a pull request.
@@ -114,6 +114,8 @@ class GithubIntegrationService:
             title=pr.title,
             html_url=HttpUrl(pr.html_url),
             author=author,
+            repo_id=pr.base.repo.id,
+            repo_name=pr.base.repo.name,
         )
 
         # 1. Header: Intent & Impact
@@ -129,13 +131,15 @@ class GithubIntegrationService:
             f"LABELS: {', '.join([label.name for label in pr.labels])}\n"
         )
 
-        # 2. Body: File Changes Summary
         files = pr.get_files()
+        pr_content.labels = [label.name for label in pr.labels]
 
         body = "\nFILE_CHANGES:\n"
+        files_list = []
         for f in files:
             status = f.status  # 'added', 'removed', 'modified', 'renamed'
             body += f"- [{status.upper()}] {f.filename}\n"
+            files_list.append(f.filename)
 
         body += "\nCOMMITS:\n"
         for commit in pr.get_commits():
@@ -145,6 +149,7 @@ class GithubIntegrationService:
                 body += f"- {commit_message.splitlines()[0]}\n"
 
         pr_content.context = header + body
+        pr_content.changed_files = files_list
         return pr_content
 
     def get_org_closed_prs_context_by_author(
