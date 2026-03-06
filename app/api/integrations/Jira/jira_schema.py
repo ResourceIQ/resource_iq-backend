@@ -197,4 +197,3 @@ class UserMappingResponse(BaseModel):
     github_id: int | None
     internal_user_id: str | None
     mapped: bool
-
