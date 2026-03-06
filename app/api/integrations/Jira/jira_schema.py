@@ -198,11 +198,3 @@ class UserMappingResponse(BaseModel):
     internal_user_id: str | None
     mapped: bool
 
-class JiraOpenIssue(BaseModel):
-    """Lightweight schema for an open Jira issue."""
-    issue_id:str
-    issue_key :str 
-    title: str
-    description : str | None =None
-    status : str 
-    priority : str | None = None
