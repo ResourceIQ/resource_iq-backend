@@ -2,14 +2,20 @@ import re
 from typing import Any
 
 from app.api.integrations.GitHub.github_schema import PullRequestContent
+from app.api.knowledge_graph.kg_extractor import ExtractedEntities
 from app.api.knowledge_graph.kg_model import (
     PR,
     Component,
+    Domain,
     Epic,
     File,
+    Framework,
     JiraIssue,
     Label,
+    Language,
     Resource,
+    Skill,
+    Tool,
 )
 from app.api.knowledge_graph.kg_schema import JiraIssueContent
 
@@ -33,8 +39,10 @@ class KnowledgeGraphService:
             },
         )
 
-        # 2. Upsert Author & Connect
-        author_node = self._create_or_update_node(Resource, {"login": pr.author.login})
+        # 2. Upsert Author & Connect (keyed on GitHub ID)
+        author_node = self._create_or_update_node(
+            Resource, {"github_id": pr.author.id, "login": pr.author.login}
+        )
         pr_node.author.connect(author_node)
 
         # 3. Upsert Component (repo) & Connect
@@ -100,3 +108,35 @@ class KnowledgeGraphService:
         if match:
             return [l.strip() for l in match.group(1).split(",") if l.strip()]  # noqa: E741
         return []
+
+    def upsert_pr_entities(
+        self,
+        pr_id: int,
+        author_id: int,
+        entities: ExtractedEntities,
+    ) -> None:
+        """Connect extracted entity nodes to the PR and author in the KG."""
+        if entities.is_empty():
+            return
+
+        pr_node = PR.nodes.get(identifier=pr_id)
+
+        for lang_name in entities.languages:
+            node = self._create_or_update_node(Language, {"name": lang_name})
+            pr_node.uses_language.connect(node)
+
+        for fw_name in entities.frameworks:
+            node = self._create_or_update_node(Framework, {"name": fw_name})
+            pr_node.uses_framework.connect(node)
+
+        for domain_slug in entities.domains:
+            node = self._create_or_update_node(Domain, {"slug": domain_slug})
+            pr_node.touches_domain.connect(node)
+
+        for skill_slug in entities.skills:
+            node = self._create_or_update_node(Skill, {"slug": skill_slug})
+            pr_node.demonstrates_skill.connect(node)
+
+        for tool_name in entities.tools:
+            node = self._create_or_update_node(Tool, {"name": tool_name})
+            pr_node.uses_tool.connect(node)

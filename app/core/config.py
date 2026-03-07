@@ -150,6 +150,10 @@ class Settings(BaseSettings):
     USE_JINA_API: bool = False
     EMBEDDING_DIMENSION: int = 1536  # Must match database Vector(dim=1536)
 
+    # Google Cloud / Vertex AI
+    GCP_PROJECT_ID: str | None = None
+    GCP_LOCATION: str = "us-central1"
+
     # Jira Integration Settings
     JIRA_URL: str | None = None  # e.g., https://your-domain.atlassian.net
     JIRA_EMAIL: str | None = None  # Email associated with Jira API token

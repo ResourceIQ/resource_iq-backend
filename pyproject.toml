@@ -37,6 +37,7 @@ dependencies = [
     "requests>=2.32.0",
     "thefuzz>=0.22.1",
     "neomodel>=6.0.1",
+    "google-cloud-aiplatform>=1.38.0",
 ]
 
 [dependency-groups]
