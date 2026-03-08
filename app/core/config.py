@@ -153,6 +153,7 @@ class Settings(BaseSettings):
     # Google Cloud / Vertex AI
     GCP_PROJECT_ID: str | None = None
     GCP_LOCATION: str = "us-central1"
+    GCP_CREDENTIALS_PATH: str | None = None
 
     # Jira Integration Settings
     JIRA_URL: str | None = None  # e.g., https://your-domain.atlassian.net

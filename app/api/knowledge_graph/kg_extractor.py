@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol
 
 import vertexai
@@ -265,6 +267,16 @@ class LLMEntityExtractor:
 
     def __init__(self, fallback: EntityExtractor | None = None):
         from app.core.config import settings
+
+        # Allow local/dev credentials to be supplied via .env without shell setup.
+        if settings.GCP_CREDENTIALS_PATH and not os.getenv(
+            "GOOGLE_APPLICATION_CREDENTIALS"
+        ):
+            configured_path = Path(settings.GCP_CREDENTIALS_PATH).expanduser()
+            if not configured_path.is_absolute():
+                repo_root = Path(__file__).resolve().parents[3]
+                configured_path = repo_root / configured_path
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(configured_path)
 
         vertexai.init(
             project=settings.GCP_PROJECT_ID,
