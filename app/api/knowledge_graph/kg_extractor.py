@@ -88,8 +88,7 @@ class EntityExtractor(Protocol):
         title: str,
         body: str,
         labels: list[str],
-    ) -> ExtractedEntities:
-        ...
+    ) -> ExtractedEntities: ...
 
 
 # ─────────────────────────────────────────────────────────────────────────────
