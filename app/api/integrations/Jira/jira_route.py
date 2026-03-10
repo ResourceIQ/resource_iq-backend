@@ -7,9 +7,9 @@ from typing import Any, cast
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
+from app.api.integrations.Jira.jira_model import JiraOAuthToken
 from app.api.integrations.Jira.jira_schema import (
     DeveloperWorkload,
-    JiraAuthCallbackResponse,
     JiraAuthConnectResponse,
     JiraIssueContent,
     JiraOpenIssue,
@@ -17,7 +17,6 @@ from app.api.integrations.Jira.jira_schema import (
     JiraSyncResponse,
     JiraUser,
 )
-from app.api.integrations.Jira.jira_model import JiraOAuthToken
 from app.api.integrations.Jira.jira_service import JiraIntegrationService
 from app.api.profiles.profile_model import ResourceProfile
 from app.core.config import settings
@@ -46,25 +45,25 @@ async def jira_oauth_callback(
 ) -> RedirectResponse:
     """Handle Atlassian OAuth callback, exchange code, and redirect to frontend."""
     frontend_url = settings.FRONTEND_HOST.rstrip("/")
-    
+
     try:
         jira_service = JiraIntegrationService(session)
         result = jira_service.handle_oauth_callback(code=code, state=state)
-        
+
         # Build success redirect URL with connection details
         params = {"jira": "connected"}
         if result.cloud_id:
             params["cloud_id"] = result.cloud_id
-        
+
         redirect_url = f"{frontend_url}/configuration?{urllib.parse.urlencode(params)}"
         return RedirectResponse(url=redirect_url, status_code=302)
-        
+
     except ValueError as e:
         # Redirect to frontend with error message
         error_message = urllib.parse.quote(str(e))
         redirect_url = f"{frontend_url}/configuration?jira=error&error={error_message}"
         return RedirectResponse(url=redirect_url, status_code=302)
-        
+
     except Exception as e:
         # Redirect to frontend with generic error
         error_message = urllib.parse.quote(f"OAuth callback failed: {str(e)}")
@@ -98,9 +97,7 @@ async def get_jira_auth_status(session: SessionDep) -> dict[str, Any]:
     is_expired = token.expires_at <= datetime.utcnow()
     can_refresh = bool(token.refresh_token)
     message = (
-        "Jira token is connected but expired"
-        if is_expired
-        else "Jira is connected"
+        "Jira token is connected but expired" if is_expired else "Jira is connected"
     )
 
     return {
