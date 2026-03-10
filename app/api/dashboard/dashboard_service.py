@@ -5,6 +5,7 @@ from sqlmodel import Session, func, select
 from app.api.profiles.profile_model import ResourceProfile
 from app.api.user.user_model import User
 from app.api.dashboard.dashboard_schema import (
+    DashboardResponse,
     TeamMembersCard,
 )
 
@@ -23,3 +24,10 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
         select(func.count()).select_from(ResourceProfile)
         .where(ResourceProfile.created_at >= month_start)
     ).one()
+
+    return DashboardResponse(
+        team_members=TeamMembersCard(
+            total=total_members,
+            new_this_month=new_this_month,
+        )
+    )
