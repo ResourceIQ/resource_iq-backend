@@ -35,3 +35,7 @@ dist/
 build/
 *.egg
 
+# Google Vertex AI / GCP service account keys
+gen-lang-client-0933275433-791cb7c9f945.json
+*-service-account*.json
+*gcp-key*.json

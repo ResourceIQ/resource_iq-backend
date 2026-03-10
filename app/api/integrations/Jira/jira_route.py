@@ -12,6 +12,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraAuthCallbackResponse,
     JiraAuthConnectResponse,
     JiraIssueContent,
+    JiraOpenIssue,
     JiraSyncRequest,
     JiraSyncResponse,
     JiraUser,
@@ -139,6 +140,41 @@ async def get_projects(session: SessionDep) -> list[dict[str, Any]]:
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch projects: {str(e)}"
+        )
+
+
+@router.get("/issues/open", response_model=list[JiraOpenIssue])
+async def get_open_issues(
+    session: SessionDep,
+    project_key: str | None = Query(
+        default=None, description="Filter by Jira project key (e.g. PROJ)"
+    ),
+    max_results: int = Query(
+        default=100, ge=1, le=500, description="Maximum number of issues to return"
+    ),
+) -> list[JiraOpenIssue]:
+    """
+    Get all open Jira issues (status not Done / Closed / Resolved).
+
+    Returns each issue's:
+    - **issue_id** – internal numeric Jira ID
+    - **issue_key** – human-readable key (e.g. PROJ-42)
+    - **title** – issue summary
+    - **description** – issue description (plain text where available)
+    - **status** – current workflow status
+    - **priority** – issue priority level
+    """
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_open_issues(
+            project_key=project_key,
+            max_results=max_results,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch open issues: {str(e)}"
         )
 
 
