@@ -1,12 +1,15 @@
 """Jira integration API routes."""
 
+import urllib.parse
+from datetime import datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import RedirectResponse
 
+from app.api.integrations.Jira.jira_model import JiraOAuthToken
 from app.api.integrations.Jira.jira_schema import (
     DeveloperWorkload,
-    JiraAuthCallbackResponse,
     JiraAuthConnectResponse,
     JiraIssueContent,
     JiraOpenIssue,
@@ -16,6 +19,7 @@ from app.api.integrations.Jira.jira_schema import (
 )
 from app.api.integrations.Jira.jira_service import JiraIntegrationService
 from app.api.profiles.profile_model import ResourceProfile
+from app.core.config import settings
 from app.utils.deps import SessionDep
 
 router = APIRouter(prefix="/jira", tags=["jira"])
@@ -33,20 +37,91 @@ async def connect_jira(session: SessionDep) -> JiraAuthConnectResponse:
         raise HTTPException(status_code=500, detail=f"Failed to start OAuth: {str(e)}")
 
 
-@router.get("/auth/callback", response_model=JiraAuthCallbackResponse)
+@router.get("/auth/callback")
 async def jira_oauth_callback(
     session: SessionDep,
     code: str = Query(..., description="Authorization code from Atlassian"),
     state: str = Query(..., description="State returned by Atlassian"),
-) -> JiraAuthCallbackResponse:
-    """Handle Atlassian OAuth callback, exchange code, and persist tokens."""
+) -> RedirectResponse:
+    """Handle Atlassian OAuth callback, exchange code, and redirect to frontend."""
+    frontend_url = settings.FRONTEND_HOST.rstrip("/")
+
     try:
         jira_service = JiraIntegrationService(session)
-        return jira_service.handle_oauth_callback(code=code, state=state)
+        result = jira_service.handle_oauth_callback(code=code, state=state)
+
+        # Build success redirect URL with connection details
+        params = {"jira": "connected"}
+        if result.cloud_id:
+            params["cloud_id"] = result.cloud_id
+
+        redirect_url = f"{frontend_url}/configuration?{urllib.parse.urlencode(params)}"
+        return RedirectResponse(url=redirect_url, status_code=302)
+
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Redirect to frontend with error message
+        error_message = urllib.parse.quote(str(e))
+        redirect_url = f"{frontend_url}/configuration?jira=error&error={error_message}"
+        return RedirectResponse(url=redirect_url, status_code=302)
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OAuth callback failed: {str(e)}")
+        # Redirect to frontend with generic error
+        error_message = urllib.parse.quote(f"OAuth callback failed: {str(e)}")
+        redirect_url = f"{frontend_url}/configuration?jira=error&error={error_message}"
+        return RedirectResponse(url=redirect_url, status_code=302)
+
+
+@router.get("/auth/status")
+async def get_jira_auth_status(session: SessionDep) -> dict[str, Any]:
+    """Return Jira OAuth connection status for the configuration page."""
+    token = (
+        session.query(JiraOAuthToken)
+        .order_by(cast(Any, JiraOAuthToken.expires_at).desc())
+        .first()
+    )
+
+    if not token:
+        return {
+            "connected": False,
+            "message": "Jira is not connected",
+            "cloud_id": None,
+            "jira_site_url": None,
+            "atlassian_account_id": None,
+            "expires_at": None,
+            "is_expired": False,
+            "can_refresh": False,
+            "scope": None,
+            "user_id": None,
+        }
+
+    is_expired = token.expires_at <= datetime.utcnow()
+    can_refresh = bool(token.refresh_token)
+    message = (
+        "Jira token is connected but expired" if is_expired else "Jira is connected"
+    )
+
+    return {
+        "connected": True,
+        "message": message,
+        "cloud_id": token.cloud_id,
+        "jira_site_url": token.jira_site_url,
+        "atlassian_account_id": None,
+        "expires_at": token.expires_at,
+        "is_expired": is_expired,
+        "can_refresh": can_refresh,
+        "scope": token.scope,
+        "user_id": None,
+    }
+
+
+@router.post("/auth/disconnect")
+async def disconnect_jira_auth(session: SessionDep) -> dict[str, str]:
+    """Disconnect Jira OAuth by removing stored tokens."""
+    tokens = session.query(JiraOAuthToken).all()
+    for token in tokens:
+        session.delete(token)
+    session.commit()
+    return {"message": "Jira disconnected successfully"}
 
 
 @router.get("/projects")
