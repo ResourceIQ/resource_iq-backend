@@ -239,7 +239,7 @@ class RegexEntityExtractor:
 
     def _run_patterns(
         self,
-        patterns: list[tuple[re.Pattern, str]],
+        patterns: list[tuple[re.Pattern[str], str]],
         text: str,
     ) -> list[str]:
         """Return matched labels, deduplicated, in match order."""

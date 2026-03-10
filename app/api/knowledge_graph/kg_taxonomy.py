@@ -972,7 +972,7 @@ def get_full_taxonomy_prompt() -> str:
 _I = re.IGNORECASE
 
 # Domain patterns: list[tuple[re.Pattern, str]]
-DOMAIN_PATTERNS: list[tuple[re.Pattern, str]] = [
+DOMAIN_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # security-and-identity
     (
         re.compile(
@@ -1298,7 +1298,7 @@ DOMAIN_PATTERNS: list[tuple[re.Pattern, str]] = [
 ]
 
 # Skill patterns: list[tuple[re.Pattern, str]]
-SKILL_PATTERNS: list[tuple[re.Pattern, str]] = [
+SKILL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # data-and-storage
     (
         re.compile(r"\b(?:migrat|alembic|flyway|liquibase|schema[.\s_-]change)\b", _I),
@@ -1581,7 +1581,7 @@ SKILL_PATTERNS: list[tuple[re.Pattern, str]] = [
 ]
 
 # Tool patterns: list[tuple[re.Pattern, str]]
-TOOL_PATTERNS: list[tuple[re.Pattern, str]] = [
+TOOL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # databases
     (re.compile(r"\b(?:postgresql|postgres)\b|psycopg", _I), "PostgreSQL"),
     (re.compile(r"\bmysql\b", _I), "MySQL"),
@@ -1690,7 +1690,7 @@ TOOL_PATTERNS: list[tuple[re.Pattern, str]] = [
 ]
 
 # Framework patterns: list[tuple[re.Pattern, str]]
-FRAMEWORK_PATTERNS: list[tuple[re.Pattern, str]] = [
+FRAMEWORK_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Python
     (re.compile(r"\bfastapi\b", _I), "FastAPI"),
     (re.compile(r"\bdjango\b", _I), "Django"),
