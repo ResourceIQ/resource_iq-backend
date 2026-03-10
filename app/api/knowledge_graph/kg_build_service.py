@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 
 from app.api.embedding.embedding_model import GitHubPRVector
 from app.api.integrations.GitHub.github_schema import GitHubUser, PullRequestContent
+from app.api.knowledge_graph.kg_extractor import LLMEntityExtractor
 from app.api.knowledge_graph.kg_schema import KGBuildResult
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
 from app.api.profiles.profile_model import ResourceProfile
@@ -17,6 +18,7 @@ class KGBuildService:
     def __init__(self, session: Session, kg_service: KnowledgeGraphService):
         self.session = session
         self.kg_service = kg_service
+        self.extractor = LLMEntityExtractor()
 
     def build_from_stored_vectors(
         self,
@@ -74,6 +76,24 @@ class KGBuildService:
                         ),
                         repo_name=pr.repo_name,
                     )
+
+                    # ── Extract entities ─────────────────────────────────
+                    meta = pr.metadata_json or {}
+                    entities = self.extractor.extract(
+                        files=meta.get("changed_files", []),
+                        commit_messages=meta.get("commit_messages", []),
+                        title=pr.pr_title,
+                        body=pr.pr_description or "",
+                        labels=meta.get("labels", []),
+                    )
+
+                    # ── Pass entities to graph service ───────────────────
+                    self.kg_service.upsert_pr_entities(
+                        pr_id=pr_identifier,
+                        author_id=resource.github_id,
+                        entities=entities,
+                    )
+
                     results["prs_processed"] += 1
 
                 results["profiles_updated"] += 1
