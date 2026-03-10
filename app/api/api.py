@@ -10,6 +10,7 @@ from app.api.knowledge_graph import kg_route
 from app.api.profiles import profile_route
 from app.api.score import score_route
 from app.api.user import user_route
+from app.api.dashboard import dashboard_route
 
 api_router = APIRouter()
 api_router.include_router(auth_route.router)
@@ -22,3 +23,4 @@ api_router.include_router(jira_webhook.router)
 api_router.include_router(embedding_route.router)
 api_router.include_router(score_route.router)
 api_router.include_router(kg_route.router)
+api_router.include_router(dashboard_route.router)
