@@ -9,8 +9,11 @@ from app.api.user.user_model import User
 from app.api.dashboard.dashboard_schema import (
     ActiveTasksCard,
     ConnectedIntegrationsCard,
+    ContributorPRCount,
     DashboardResponse,
+    GitHubPRStatsCard,
     PendingAssignmentsCard,
+    RepoPRCount,
     ResourceUtilizationStatus,
     TeamAllocation,
     TeamMembersCard,
@@ -150,4 +153,38 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
             utilized=utilized,
             available=available,
         ),
+    )
+
+
+def get_github_pr_stats(session: Session) -> GitHubPRStatsCard:
+    """Get aggregated GitHub PR statistics."""
+    from app.api.embedding.embedding_model import GitHubPRVector
+
+    # Total Active PRs
+    total_prs = session.exec(select(func.count()).select_from(GitHubPRVector)).one()
+
+    # PRs by Repository
+    repo_counts = session.exec(
+        select(GitHubPRVector.repo_name, func.count(GitHubPRVector.id))
+        .group_by(GitHubPRVector.repo_name)
+        .order_by(func.count(GitHubPRVector.id).desc())
+    ).all()
+    prs_by_repo = [RepoPRCount(repo_name=row[0], count=row[1]) for row in repo_counts]
+
+    # Top Contributors
+    contributor_counts = session.exec(
+        select(GitHubPRVector.author_login, func.count(GitHubPRVector.id))
+        .group_by(GitHubPRVector.author_login)
+        .order_by(func.count(GitHubPRVector.id).desc())
+        .limit(5)
+    ).all()
+    top_contributors = [
+        ContributorPRCount(author_login=row[0], count=row[1])
+        for row in contributor_counts
+    ]
+
+    return GitHubPRStatsCard(
+        total_active_prs=total_prs,
+        prs_by_repo=prs_by_repo,
+        top_contributors=top_contributors,
     )

@@ -54,3 +54,19 @@ class DashboardResponse(BaseModel):
     pending_assignments: PendingAssignmentsCard
     resource_allocation_by_team: list[TeamAllocation]
     resource_utilization: ResourceUtilizationStatus
+
+
+class RepoPRCount(BaseModel):
+    repo_name: str
+    count: int
+
+
+class ContributorPRCount(BaseModel):
+    author_login: str
+    count: int
+
+
+class GitHubPRStatsCard(BaseModel):
+    total_active_prs: int
+    prs_by_repo: list[RepoPRCount]
+    top_contributors: list[ContributorPRCount]
