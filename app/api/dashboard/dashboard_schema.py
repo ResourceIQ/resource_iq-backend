@@ -1,5 +1,7 @@
 """ dashabrod response schemas """
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -32,6 +34,17 @@ class ResourceUtilizationStatus(BaseModel):
     total_resources: int         # e.g. 41
     utilized: int                # resources currently assigned
     available: int               # resources not assigned
+
+
+class ConnectedIntegrationsCard(BaseModel):
+    jira_connected: bool                        # Is Jira OAuth token present?
+    github_connected: bool                      # Is GitHub integration present?
+    jira_token_expires_at: datetime | None       # When the Jira token expires
+    jira_token_expiring_soon: bool              # True if expires within 24 hours
+    jira_site_url: str | None                   # Jira site URL
+    github_org_name: str | None                 # GitHub org name
+    health_status: str                          # "Healthy", "Warning", "Disconnected"
+    health_message: str                         # Human-readable summary
 
 
 class DashboardResponse(BaseModel):
