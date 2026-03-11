@@ -5,12 +5,14 @@ from fastapi import APIRouter
 from app.api.dashboard.dashboard_schema import (
     ConnectedIntegrationsCard, 
     DashboardResponse,
-    GitHubPRStatsCard
+    GitHubPRStatsCard,
+    JiraTaskStatsCard
 )
 from app.api.dashboard.dashboard_service import (
     get_dashboard_data, 
     get_integration_health,
-    get_github_pr_stats
+    get_github_pr_stats,
+    get_jira_task_stats
 )
 from app.utils.deps import CurrentUser, SessionDep
 
@@ -33,4 +35,10 @@ def get_integrations_health(session: SessionDep, current_user: CurrentUser) -> C
 def get_github_stats(session: SessionDep, current_user: CurrentUser) -> GitHubPRStatsCard:
     """Get GitHub PR statistics for dashboard."""
     return get_github_pr_stats(session)
+
+
+@router.get("/jira/tasks/stats", response_model=JiraTaskStatsCard)
+def get_jira_stats(session: SessionDep, current_user: CurrentUser) -> JiraTaskStatsCard:
+    """Get Jira task statistics for dashboard."""
+    return get_jira_task_stats(session)
 

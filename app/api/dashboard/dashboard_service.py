@@ -8,11 +8,14 @@ from app.api.profiles.profile_model import ResourceProfile
 from app.api.user.user_model import User
 from app.api.dashboard.dashboard_schema import (
     ActiveTasksCard,
+    AssigneeTaskCount,
     ConnectedIntegrationsCard,
     ContributorPRCount,
     DashboardResponse,
     GitHubPRStatsCard,
+    JiraTaskStatsCard,
     PendingAssignmentsCard,
+    ProjectTaskCount,
     RepoPRCount,
     ResourceUtilizationStatus,
     TeamAllocation,
@@ -187,4 +190,45 @@ def get_github_pr_stats(session: Session) -> GitHubPRStatsCard:
         total_active_prs=total_prs,
         prs_by_repo=prs_by_repo,
         top_contributors=top_contributors,
+    )
+
+
+def get_jira_task_stats(session: Session) -> JiraTaskStatsCard:
+    """Get aggregated Jira task statistics."""
+    from app.api.embedding.embedding_model import JiraIssueVector
+
+    # Total Active Tasks
+    total_tasks = session.exec(select(func.count()).select_from(JiraIssueVector)).one()
+
+    # Unassigned Tasks
+    unassigned_count = session.exec(
+        select(func.count()).select_from(JiraIssueVector).where(JiraIssueVector.assignee_account_id == None)
+    ).one()
+
+    # Tasks by Project
+    project_counts = session.exec(
+        select(JiraIssueVector.project_key, func.count(JiraIssueVector.id))
+        .group_by(JiraIssueVector.project_key)
+        .order_by(func.count(JiraIssueVector.id).desc())
+    ).all()
+    tasks_by_project = [ProjectTaskCount(project_key=row[0], count=row[1]) for row in project_counts]
+
+    # Top Assignees
+    assignee_counts = session.exec(
+        select(JiraIssueVector.assignee_account_id, func.count(JiraIssueVector.id))
+        .where(JiraIssueVector.assignee_account_id != None)
+        .group_by(JiraIssueVector.assignee_account_id)
+        .order_by(func.count(JiraIssueVector.id).desc())
+        .limit(5)
+    ).all()
+    top_assignees = [
+        AssigneeTaskCount(assignee_account_id=row[0], count=row[1])
+        for row in assignee_counts
+    ]
+
+    return JiraTaskStatsCard(
+        total_active_tasks=total_tasks,
+        unassigned_tasks=unassigned_count,
+        tasks_by_project=tasks_by_project,
+        top_assignees=top_assignees,
     )

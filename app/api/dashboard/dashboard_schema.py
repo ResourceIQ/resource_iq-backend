@@ -70,3 +70,20 @@ class GitHubPRStatsCard(BaseModel):
     total_active_prs: int
     prs_by_repo: list[RepoPRCount]
     top_contributors: list[ContributorPRCount]
+
+
+class ProjectTaskCount(BaseModel):
+    project_key: str
+    count: int
+
+
+class AssigneeTaskCount(BaseModel):
+    assignee_account_id: str | None
+    count: int
+
+
+class JiraTaskStatsCard(BaseModel):
+    total_active_tasks: int
+    unassigned_tasks: int
+    tasks_by_project: list[ProjectTaskCount]
+    top_assignees: list[AssigneeTaskCount]
