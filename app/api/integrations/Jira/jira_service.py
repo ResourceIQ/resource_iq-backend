@@ -773,9 +773,7 @@ class JiraIntegrationService:
 
             existing = (
                 self.db.query(JiraIssueTypeStatus)
-                .filter(
-                    cast(Any, JiraIssueTypeStatus.issue_type_id == type_id)
-                )
+                .filter(cast(Any, JiraIssueTypeStatus.issue_type_id == type_id))
                 .first()
             )
 
@@ -822,9 +820,11 @@ class JiraIntegrationService:
 
     def get_issue_type_statuses(self) -> list[JiraIssueTypeStatusResponse]:
         """Return all persisted issue types with their status configuration."""
-        rows = self.db.query(JiraIssueTypeStatus).order_by(
-            cast(Any, JiraIssueTypeStatus.issue_type_name)
-        ).all()
+        rows = (
+            self.db.query(JiraIssueTypeStatus)
+            .order_by(cast(Any, JiraIssueTypeStatus.issue_type_name))
+            .all()
+        )
         return [self._to_response(r) for r in rows]
 
     def update_issue_type_selected_statuses(
@@ -838,8 +838,7 @@ class JiraIntegrationService:
         )
         if not row:
             raise ValueError(
-                f"Issue type '{issue_type_id}' not found. "
-                "Run issue-type sync first."
+                f"Issue type '{issue_type_id}' not found. Run issue-type sync first."
             )
 
         invalid = set(selected_statuses) - set(row.available_statuses)
@@ -1402,18 +1401,12 @@ class JiraIntegrationService:
                     issue_content = self._parse_issue(issue)
 
                     status_map = self._build_embedding_status_map()
-                    matches = self._matches_selected_status(
-                        issue_content, status_map
-                    )
+                    matches = self._matches_selected_status(issue_content, status_map)
 
                     if matches and issue_content.context:
-                        created, updated = self._store_issue_embeddings(
-                            [issue_content]
-                        )
+                        created, updated = self._store_issue_embeddings([issue_content])
                         if issue_content.assignee:
-                            self._update_resource_profiles_from_vectors(
-                                [issue_content]
-                            )
+                            self._update_resource_profiles_from_vectors([issue_content])
                         self.db.commit()
                         result["processed"] = True
                         result["issue_key"] = issue.key
