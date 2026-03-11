@@ -11,8 +11,8 @@ from fastapi.responses import RedirectResponse
 
 from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
 from app.api.integrations.GitHub.github_schema import (
-    GitHubAppConnectResponse,
     GitHubAppConnectionStatus,
+    GitHubAppConnectResponse,
     GitHubRepository,
     GitHubSyncRequest,
     GitHubSyncResponse,
@@ -137,7 +137,7 @@ async def connect_github(session: SessionDep) -> GitHubAppConnectResponse | GitH
 async def github_app_setup_callback(
     session: SessionDep,
     installation_id: int | None = Query(default=None),
-    setup_action: str | None = Query(default=None),
+    _setup_action: str | None = Query(default=None, alias="setup_action"),
 ) -> RedirectResponse:
     """
     GitHub App post-installation "Setup URL" callback.

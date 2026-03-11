@@ -5,7 +5,7 @@ import re
 import time
 from typing import Any
 
-from github import Auth, Github, GithubIntegration
+from github import Auth, Github
 from github.PullRequest import PullRequest
 from pydantic import HttpUrl
 from sqlalchemy.orm import Session
@@ -146,7 +146,7 @@ class GithubIntegrationService:
                     "created_at": pr.created_at.isoformat() if pr.created_at else None,
                     "updated_at": pr.updated_at.isoformat() if pr.updated_at else None,
                     "merged_at": pr.merged_at.isoformat() if pr.merged_at else None,
-                    "labels": [l.name for l in pr.labels],
+                    "labels": [label.name for label in pr.labels],
                 }
             )
 
