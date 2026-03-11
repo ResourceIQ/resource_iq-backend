@@ -85,7 +85,7 @@ class GithubIntegrationService:
                     name=r.name,
                     full_name=r.full_name,
                     private=r.private,
-                    html_url=r.html_url,
+                    html_url=HttpUrl(r.html_url),
                     description=r.description,
                     default_branch=r.default_branch or "main",
                     language=r.language,
@@ -205,11 +205,11 @@ class GithubIntegrationService:
         if generate_embeddings and all_pr_contents:
             try:
                 authors_prs: dict[str, list[PullRequestContent]] = {}
-                for pr in all_pr_contents:
-                    login = pr.author.login
+                for pr_content in all_pr_contents:
+                    login = pr_content.author.login
                     if login not in authors_prs:
                         authors_prs[login] = []
-                    authors_prs[login].append(pr)
+                    authors_prs[login].append(pr_content)
                 self.vector_service.store_all_authors_pr_contexts(authors_prs)
                 embeddings_generated = len(all_pr_contents)
             except Exception as e:
