@@ -81,7 +81,9 @@ class GitHubSyncRequest(BaseModel):
         description="Specific repos to sync (name, not full_name). If None, syncs all.",
     )
     max_prs_per_repo: int = Field(
-        default=100, ge=1, le=500,
+        default=100,
+        ge=1,
+        le=500,
         description="Maximum PRs to fetch per repo",
     )
     include_open: bool = Field(default=False, description="Include open PRs")

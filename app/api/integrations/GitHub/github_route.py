@@ -38,7 +38,9 @@ def _generate_app_jwt() -> str:
     return jwt.encode(payload, settings.GITHUB_PRIVATE_KEY, algorithm="RS256")
 
 
-def _discover_and_store_installation(session: SessionDep) -> GithubOrgIntBaseModel | None:
+def _discover_and_store_installation(
+    session: SessionDep,
+) -> GithubOrgIntBaseModel | None:
     """
     Query GitHub API to discover existing installations and store the first one.
     Only called explicitly from the /auth/connect endpoint.
@@ -54,7 +56,9 @@ def _discover_and_store_installation(session: SessionDep) -> GithubOrgIntBaseMod
             timeout=10,
         )
         if resp.status_code != 200:
-            logger.warning("Failed to discover installations: %s %s", resp.status_code, resp.text)
+            logger.warning(
+                "Failed to discover installations: %s %s", resp.status_code, resp.text
+            )
             return None
 
         installations = resp.json()
@@ -78,7 +82,9 @@ def _discover_and_store_installation(session: SessionDep) -> GithubOrgIntBaseMod
 
         session.commit()
         session.refresh(existing)
-        logger.info("Auto-discovered GitHub installation: %s (org: %s)", install_id, org_name)
+        logger.info(
+            "Auto-discovered GitHub installation: %s (org: %s)", install_id, org_name
+        )
         return existing
 
     except Exception as e:
@@ -90,7 +96,9 @@ def _discover_and_store_installation(session: SessionDep) -> GithubOrgIntBaseMod
 
 
 @router.get("/auth/connect")
-async def connect_github(session: SessionDep) -> GitHubAppConnectResponse | GitHubAppConnectionStatus:
+async def connect_github(
+    session: SessionDep,
+) -> GitHubAppConnectResponse | GitHubAppConnectionStatus:
     """
     Try to auto-discover existing GitHub App installations first.
     If found, store it and return connected status.
@@ -170,10 +178,12 @@ async def github_app_setup_callback(
                 existing.github_install_id = str(installation_id)
                 existing.org_name = org_name
             else:
-                session.add(GithubOrgIntBaseModel(
-                    github_install_id=str(installation_id),
-                    org_name=org_name,
-                ))
+                session.add(
+                    GithubOrgIntBaseModel(
+                        github_install_id=str(installation_id),
+                        org_name=org_name,
+                    )
+                )
             session.commit()
 
     return RedirectResponse(

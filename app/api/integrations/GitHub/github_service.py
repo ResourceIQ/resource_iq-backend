@@ -178,7 +178,9 @@ class GithubIntegrationService:
 
         for repo_name in repo_names:
             try:
-                logger.info(f"Syncing GitHub repo: {self.organization_name}/{repo_name}")
+                logger.info(
+                    f"Syncing GitHub repo: {self.organization_name}/{repo_name}"
+                )
                 repo = org.get_repo(repo_name)
 
                 states = ["closed"]
@@ -187,7 +189,9 @@ class GithubIntegrationService:
 
                 for state in states:
                     count = 0
-                    for pr in repo.get_pulls(state=state, sort="updated", direction="desc"):
+                    for pr in repo.get_pulls(
+                        state=state, sort="updated", direction="desc"
+                    ):
                         if count >= max_prs_per_repo:
                             break
                         try:
