@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.auth import auth_route
+from app.api.dashboard import dashboard_route
 from app.api.embedding import embedding_route
 from app.api.integrations.GitHub import github_route, github_webhook
 from app.api.integrations.Jira import jira_route, jira_webhook
@@ -22,3 +23,4 @@ api_router.include_router(jira_webhook.router)
 api_router.include_router(embedding_route.router)
 api_router.include_router(score_route.router)
 api_router.include_router(kg_route.router)
+api_router.include_router(dashboard_route.router)
