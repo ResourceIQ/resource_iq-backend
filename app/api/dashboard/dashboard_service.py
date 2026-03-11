@@ -2,10 +2,8 @@
 
 from datetime import datetime, timedelta
 
-from sqlmodel import Session, func, select
+from sqlmodel import Session, col, func, select
 
-from app.api.profiles.profile_model import ResourceProfile
-from app.api.user.user_model import User
 from app.api.dashboard.dashboard_schema import (
     ActiveTasksCard,
     AssigneeTaskCount,
@@ -28,12 +26,14 @@ from app.api.dashboard.dashboard_schema import (
     TeamUtilizationCard,
     UserWorkload,
 )
+from app.api.profiles.profile_model import ResourceProfile
+from app.api.user.user_model import User
 
 
 def get_integration_health(session: Session) -> ConnectedIntegrationsCard:
     """Check Jira OAuth token and GitHub org integration status."""
-    from app.api.integrations.Jira.jira_model import JiraOAuthToken
     from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
+    from app.api.integrations.Jira.jira_model import JiraOAuthToken
 
     # --- Jira ---
     jira_token = session.exec(
@@ -46,7 +46,9 @@ def get_integration_health(session: Session) -> ConnectedIntegrationsCard:
 
     # Token expiring within 24 hours?
     if jira_token and jira_token.expires_at:
-        jira_token_expiring_soon = jira_token.expires_at <= datetime.utcnow() + timedelta(hours=24)
+        jira_token_expiring_soon = (
+            jira_token.expires_at <= datetime.utcnow() + timedelta(hours=24)
+        )
     else:
         jira_token_expiring_soon = False
 
@@ -90,14 +92,13 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
     """Aggregate all dashboard metrics from the database."""
 
     # ---- 1. Team Members ----
-    total_members = session.exec(
-        select(func.count()).select_from(User)
-    ).one()
+    total_members = session.exec(select(func.count()).select_from(User)).one()
 
     month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0)
     new_this_month = session.exec(
-        select(func.count()).select_from(ResourceProfile)
-        .where(ResourceProfile.created_at >= month_start)
+        select(func.count())
+        .select_from(ResourceProfile)
+        .where(col(ResourceProfile.created_at) >= month_start)
     ).one()
 
     # ---- 2. Team Utilization ----
@@ -120,8 +121,11 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
 
     # ---- 3. Active Tasks (Total synced from Jira) ----
     from app.api.embedding.embedding_model import JiraIssueVector
-    total_jira_tasks = session.exec(select(func.count()).select_from(JiraIssueVector)).one()
-    
+
+    total_jira_tasks = session.exec(
+        select(func.count()).select_from(JiraIssueVector)
+    ).one()
+
     # Real 0 from DB (not yet tracked in vectors)
     completed_this_week = 0
 
@@ -174,17 +178,17 @@ def get_github_pr_stats(session: Session) -> GitHubPRStatsCard:
 
     # PRs by Repository
     repo_counts = session.exec(
-        select(GitHubPRVector.repo_name, func.count(GitHubPRVector.id))
+        select(GitHubPRVector.repo_name, func.count(col(GitHubPRVector.id)))
         .group_by(GitHubPRVector.repo_name)
-        .order_by(func.count(GitHubPRVector.id).desc())
+        .order_by(func.count(col(GitHubPRVector.id)).desc())
     ).all()
     prs_by_repo = [RepoPRCount(repo_name=row[0], count=row[1]) for row in repo_counts]
 
     # Top Contributors
     contributor_counts = session.exec(
-        select(GitHubPRVector.author_login, func.count(GitHubPRVector.id))
+        select(GitHubPRVector.author_login, func.count(col(GitHubPRVector.id)))
         .group_by(GitHubPRVector.author_login)
-        .order_by(func.count(GitHubPRVector.id).desc())
+        .order_by(func.count(col(GitHubPRVector.id)).desc())
         .limit(5)
     ).all()
     top_contributors = [
@@ -208,23 +212,27 @@ def get_jira_task_stats(session: Session) -> JiraTaskStatsCard:
 
     # Unassigned Tasks
     unassigned_count = session.exec(
-        select(func.count()).select_from(JiraIssueVector).where(JiraIssueVector.assignee_account_id == None)
+        select(func.count())
+        .select_from(JiraIssueVector)
+        .where(col(JiraIssueVector.assignee_account_id).is_(None))
     ).one()
 
     # Tasks by Project
     project_counts = session.exec(
-        select(JiraIssueVector.project_key, func.count(JiraIssueVector.id))
+        select(JiraIssueVector.project_key, func.count(col(JiraIssueVector.id)))
         .group_by(JiraIssueVector.project_key)
-        .order_by(func.count(JiraIssueVector.id).desc())
+        .order_by(func.count(col(JiraIssueVector.id)).desc())
     ).all()
-    tasks_by_project = [ProjectTaskCount(project_key=row[0], count=row[1]) for row in project_counts]
+    tasks_by_project = [
+        ProjectTaskCount(project_key=row[0], count=row[1]) for row in project_counts
+    ]
 
     # Top Assignees
     assignee_counts = session.exec(
-        select(JiraIssueVector.assignee_account_id, func.count(JiraIssueVector.id))
-        .where(JiraIssueVector.assignee_account_id != None)
+        select(JiraIssueVector.assignee_account_id, func.count(col(JiraIssueVector.id)))
+        .where(col(JiraIssueVector.assignee_account_id).is_not(None))
         .group_by(JiraIssueVector.assignee_account_id)
-        .order_by(func.count(JiraIssueVector.id).desc())
+        .order_by(func.count(col(JiraIssueVector.id)).desc())
         .limit(5)
     ).all()
     top_assignees = [
@@ -290,7 +298,7 @@ def get_profile_workload(session: Session) -> ProfileWorkloadCard:
 
         user_data = UserWorkload(
             user_id=str(user.id),
-            name=user.full_name,
+            name=user.full_name or "Unknown",
             jira_workload=profile.jira_workload,
             github_workload=profile.github_workload,
             total_workload=profile.total_workload,
@@ -315,10 +323,10 @@ def get_profile_workload(session: Session) -> ProfileWorkloadCard:
 def get_profile_integrations(session: Session) -> ProfileIntegrationsCard:
     """Count how many users have connected Jira/GitHub accounts."""
     profiles = session.exec(select(ResourceProfile)).all()
-    
+
     jira_connected = sum(1 for p in profiles if p.has_jira)
     github_connected = sum(1 for p in profiles if p.has_github)
-    
+
     total = len(profiles)
 
     return ProfileIntegrationsCard(
