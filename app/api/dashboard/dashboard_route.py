@@ -13,3 +13,4 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 def get_dashboard(session: SessionDep, current_user: CurrentUser) -> DashboardResponse:
     """Get aggregated dashboard metrics."""
     return get_dashboard_data(session)
+
