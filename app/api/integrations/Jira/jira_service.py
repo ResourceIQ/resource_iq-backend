@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.api.embedding.embedding_model import JiraIssueVector
 from app.api.embedding.embedding_service import VectorEmbeddingService
 from app.api.integrations.Jira.jira_model import (
+    JiraIssueTypeStatus,
     JiraOAuthToken,
     JiraOrgIntegration,
 )
@@ -28,6 +29,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraAuthConnectResponse,
     JiraComment,
     JiraIssueContent,
+    JiraIssueTypeStatusResponse,
     JiraOpenIssue,
     JiraSyncResponse,
     JiraUser,
@@ -663,6 +665,202 @@ class JiraIntegrationService:
 
         return result
 
+    def fetch_issue_types(self) -> list[dict[str, Any]]:
+        """Fetch all issue types from the Jira instance."""
+        client = self.get_jira_client()
+
+        auth_header = client._session.headers.get("Authorization")
+        if not auth_header:
+            raise ValueError("No Authorization header in session")
+
+        server = client._options["server"]
+        headers = {
+            "Authorization": auth_header,
+            "Accept": "application/json",
+        }
+
+        resp = httpx.get(
+            f"{server}/rest/api/3/issuetype",
+            headers=headers,
+            timeout=10,
+        )
+
+        if resp.status_code != 200:
+            raise ValueError(
+                f"Failed to fetch issue types: HTTP {resp.status_code} - {resp.text}"
+            )
+
+        return [
+            {
+                "id": it.get("id"),
+                "name": it.get("name"),
+                "description": it.get("description"),
+                "subtask": it.get("subtask", False),
+                "icon_url": it.get("iconUrl"),
+            }
+            for it in resp.json()
+            if not it.get("subtask", False)
+        ]
+
+    def fetch_statuses_for_project(self, project_key: str) -> dict[str, list[str]]:
+        """Fetch available statuses grouped by issue type for a project.
+
+        Returns a mapping of issue_type_name -> [status_name, ...].
+        """
+        client = self.get_jira_client()
+
+        auth_header = client._session.headers.get("Authorization")
+        if not auth_header:
+            raise ValueError("No Authorization header in session")
+
+        server = client._options["server"]
+        headers = {
+            "Authorization": auth_header,
+            "Accept": "application/json",
+        }
+
+        resp = httpx.get(
+            f"{server}/rest/api/3/project/{project_key}/statuses",
+            headers=headers,
+            timeout=10,
+        )
+
+        if resp.status_code != 200:
+            raise ValueError(
+                f"Failed to fetch project statuses: HTTP {resp.status_code} - {resp.text}"
+            )
+
+        result: dict[str, list[str]] = {}
+        for issue_type_block in resp.json():
+            type_name = issue_type_block.get("name", "")
+            statuses = [
+                s.get("name", "")
+                for s in issue_type_block.get("statuses", [])
+                if s.get("name")
+            ]
+            if type_name and statuses:
+                result[type_name] = statuses
+        return result
+
+    def sync_issue_type_statuses(self) -> list[JiraIssueTypeStatusResponse]:
+        """Fetch issue types and their workflow statuses from Jira.
+
+        For each type the full set of available statuses is stored.
+        ``selected_statuses`` defaults to common terminal statuses
+        (Done, Closed, Resolved) on first sync but user choices are
+        preserved on subsequent syncs.
+        """
+        issue_types = self.fetch_issue_types()
+
+        # Gather statuses from all accessible projects
+        projects = self.get_all_projects()
+        all_statuses_by_type: dict[str, set[str]] = {}
+        for project in projects:
+            try:
+                project_statuses = self.fetch_statuses_for_project(project["key"])
+                for type_name, statuses in project_statuses.items():
+                    all_statuses_by_type.setdefault(type_name, set()).update(statuses)
+            except Exception as e:
+                logger.warning(
+                    f"Could not fetch statuses for project {project['key']}: {e}"
+                )
+
+        saved: list[JiraIssueTypeStatusResponse] = []
+        for it in issue_types:
+            type_id = it["id"]
+            type_name = it["name"]
+            available = sorted(all_statuses_by_type.get(type_name, set()))
+
+            existing = (
+                self.db.query(JiraIssueTypeStatus)
+                .filter(
+                    cast(Any, JiraIssueTypeStatus.issue_type_id == type_id)
+                )
+                .first()
+            )
+
+            if existing:
+                existing.issue_type_name = type_name
+                existing.available_statuses = available
+                # Remove any previously selected status no longer available
+                existing.selected_statuses = [
+                    s for s in existing.selected_statuses if s in available
+                ]
+                existing.updated_at = self._now()
+            else:
+                default_selected = self._detect_terminal_statuses(available)
+                existing = JiraIssueTypeStatus(
+                    issue_type_id=type_id,
+                    issue_type_name=type_name,
+                    available_statuses=available,
+                    selected_statuses=default_selected,
+                )
+                self.db.add(existing)
+
+            self.db.flush()
+            saved.append(self._to_response(existing))
+
+        self.db.commit()
+        return saved
+
+    @staticmethod
+    def _detect_terminal_statuses(statuses: list[str]) -> list[str]:
+        """Pick likely terminal statuses from available options as defaults."""
+        terminals = {"Done", "Closed", "Resolved", "Complete", "Completed"}
+        found = [s for s in statuses if s in terminals]
+        return found if found else statuses[-1:] if statuses else []
+
+    @staticmethod
+    def _to_response(row: JiraIssueTypeStatus) -> JiraIssueTypeStatusResponse:
+        return JiraIssueTypeStatusResponse(
+            id=row.id,  # type: ignore[arg-type]
+            issue_type_id=row.issue_type_id,
+            issue_type_name=row.issue_type_name,
+            available_statuses=row.available_statuses,
+            selected_statuses=row.selected_statuses,
+        )
+
+    def get_issue_type_statuses(self) -> list[JiraIssueTypeStatusResponse]:
+        """Return all persisted issue types with their status configuration."""
+        rows = self.db.query(JiraIssueTypeStatus).order_by(
+            cast(Any, JiraIssueTypeStatus.issue_type_name)
+        ).all()
+        return [self._to_response(r) for r in rows]
+
+    def update_issue_type_selected_statuses(
+        self, issue_type_id: str, selected_statuses: list[str]
+    ) -> JiraIssueTypeStatusResponse:
+        """Update which statuses qualify for embedding on an issue type."""
+        row = (
+            self.db.query(JiraIssueTypeStatus)
+            .filter(cast(Any, JiraIssueTypeStatus.issue_type_id == issue_type_id))
+            .first()
+        )
+        if not row:
+            raise ValueError(
+                f"Issue type '{issue_type_id}' not found. "
+                "Run issue-type sync first."
+            )
+
+        invalid = set(selected_statuses) - set(row.available_statuses)
+        if invalid:
+            raise ValueError(
+                f"Invalid statuses for '{row.issue_type_name}': "
+                f"{', '.join(sorted(invalid))}. "
+                f"Valid: {', '.join(row.available_statuses)}"
+            )
+
+        row.selected_statuses = selected_statuses
+        row.updated_at = self._now()
+        self.db.commit()
+        self.db.refresh(row)
+        return self._to_response(row)
+
+    def _build_embedding_status_map(self) -> dict[str, set[str]]:
+        """Build issue_type_name -> {selected statuses} lookup."""
+        rows = self.db.query(JiraIssueTypeStatus).all()
+        return {r.issue_type_name: set(r.selected_statuses) for r in rows}
+
     def _parse_jira_user(self, user_data: Any) -> JiraUser | None:
         """Parse Jira user object into JiraUser schema."""
         if not user_data:
@@ -813,25 +1011,37 @@ class JiraIntegrationService:
         """
         Sync issues from Jira to local database.
         Main data ingestion pipeline.
+
+        For each issue type, only issues whose current status appears in
+        that type's ``selected_statuses`` list are embedded.  If no config
+        exists yet, issue types are auto-synced with sensible defaults.
         """
         import time
 
         start_time = time.time()
 
-        # Get projects to sync
         if project_keys is None:
             if self.integration and self.integration.project_keys:
                 project_keys = self.integration.project_keys.split(",")
             else:
-                # Sync all accessible projects
                 projects = self.get_all_projects()
                 project_keys = [p["key"] for p in projects]
+
+        # Load per-type selected statuses; auto-sync if empty
+        status_map = self._build_embedding_status_map()
+        if not status_map:
+            try:
+                self.sync_issue_type_statuses()
+                status_map = self._build_embedding_status_map()
+            except Exception as e:
+                logger.warning(f"Auto-sync of issue type config failed: {e}")
 
         vectors_created = 0
         vectors_updated = 0
         embeddings_generated = 0
         errors: list[str] = []
         all_issue_contents: list[JiraIssueContent] = []
+        embedding_eligible: list[JiraIssueContent] = []
 
         for project_key in project_keys:
             try:
@@ -848,6 +1058,9 @@ class JiraIntegrationService:
                             issue, include_comments=sync_comments
                         )
                         all_issue_contents.append(issue_content)
+
+                        if self._matches_selected_status(issue_content, status_map):
+                            embedding_eligible.append(issue_content)
                     except Exception as e:
                         error_msg = f"Error processing issue {issue.key}: {str(e)}"
                         logger.error(error_msg)
@@ -858,25 +1071,31 @@ class JiraIntegrationService:
                 logger.error(error_msg)
                 errors.append(error_msg)
 
-        # Generate and store embeddings (vectors only)
-        if generate_embeddings and all_issue_contents:
+        if generate_embeddings and embedding_eligible:
             try:
                 vectors_created, vectors_updated = self._store_issue_embeddings(
-                    all_issue_contents
+                    embedding_eligible
                 )
                 embeddings_generated = vectors_created + vectors_updated
+                logger.info(
+                    f"Embeddings: {embeddings_generated} from "
+                    f"{len(embedding_eligible)}/{len(all_issue_contents)} "
+                    f"status-matched issues"
+                )
             except Exception as e:
                 error_msg = f"Error generating embeddings: {str(e)}"
                 logger.error(error_msg)
                 errors.append(error_msg)
 
-        # Update resource profiles from vectors
         try:
             self._update_resource_profiles_from_vectors(all_issue_contents)
+            self.db.commit()
         except Exception as e:
             logger.warning(f"Error updating resource profiles: {str(e)}")
-
-        self.db.commit()
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
 
         duration = time.time() - start_time
 
@@ -891,24 +1110,49 @@ class JiraIntegrationService:
             sync_duration_seconds=round(duration, 2),
         )
 
+    @staticmethod
+    def _matches_selected_status(
+        issue: JiraIssueContent, status_map: dict[str, set[str]]
+    ) -> bool:
+        """Check if the issue's status is in the selected statuses for its type."""
+        selected = status_map.get(issue.issue_type)
+        if selected:
+            return issue.status in selected
+        # Fallback when no config exists for this type
+        return issue.status in {"Done", "Closed", "Resolved"}
+
     def _store_issue_embeddings(
         self, issues: list[JiraIssueContent]
     ) -> tuple[int, int]:
         """
         Generate and store embeddings for issues.
-        Prepares data for NLP processing.
-        Returns tuple of (created_count, updated_count).
+
+        The embedding generation step (model inference) can take many minutes.
+        To avoid PostgreSQL killing the idle-in-transaction connection we:
+        1. Release any open transaction **before** the expensive compute.
+        2. Write results back in small batches with per-item rollback recovery.
         """
         if not issues:
             return (0, 0)
 
-        # Get contexts for embedding
         contexts = [issue.context or "" for issue in issues if issue.context]
         valid_issues = [issue for issue in issues if issue.context]
 
         if not contexts:
             return (0, 0)
 
+        # --- Phase 1: release the DB connection before long compute -------------
+        #     commit() ends the transaction; close() returns the connection to
+        #     the pool.  On next use SQLAlchemy will check out a fresh (and
+        #     pool_pre_ping-verified) connection, avoiding stale-socket errors
+        #     after minutes of idle time.
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+        self.db.close()
+
+        # --- Phase 2: generate embeddings (pure compute, no DB) ---------------
         try:
             embeddings = self.vector_service.generate_embeddings(contexts)
         except Exception as e:
@@ -921,16 +1165,19 @@ class JiraIntegrationService:
                 except Exception as doc_error:
                     logger.error(f"Failed to embed context: {str(doc_error)}")
 
+        # --- Phase 3: write to DB in batches with per-item recovery -----------
         created_count = 0
         updated_count = 0
-        for issue, embedding in zip(valid_issues, embeddings, strict=False):
+        batch_size = 10
+
+        for idx, (issue, embedding) in enumerate(
+            zip(valid_issues, embeddings, strict=False)
+        ):
             try:
-                # Normalize embedding dimension
                 embedding = self.vector_service._normalize_embedding_dimension(
                     embedding
                 )
 
-                # Check if exists
                 existing = (
                     self.db.query(JiraIssueVector)
                     .filter(cast(Any, JiraIssueVector.issue_id == issue.issue_id))
@@ -961,8 +1208,22 @@ class JiraIntegrationService:
                     self.db.add(db_vector)
                     created_count += 1
 
+                if (idx + 1) % batch_size == 0:
+                    self.db.commit()
+
             except Exception as e:
                 logger.error(f"Error storing embedding for {issue.issue_key}: {str(e)}")
+                try:
+                    self.db.rollback()
+                except Exception:
+                    pass
+
+        # Flush remaining items
+        try:
+            self.db.commit()
+        except Exception as e:
+            logger.error(f"Error committing final embedding batch: {str(e)}")
+            self.db.rollback()
 
         return (created_count, updated_count)
 
@@ -1125,43 +1386,63 @@ class JiraIntegrationService:
     ) -> dict[str, Any]:
         """
         Process a Jira webhook event for real-time updates.
-        Only stores vector embeddings, not full issue data.
+
+        Embeddings are only created/updated when the issue's current status
+        is in the selected statuses for its type.  Otherwise any stale
+        embedding is removed.
         """
-        result = {"event_type": event_type, "processed": False}
+        result: dict[str, Any] = {"event_type": event_type, "processed": False}
 
         try:
             if event_type in ["jira:issue_created", "jira:issue_updated"]:
                 issue_data = payload.get("issue")
                 if issue_data:
-                    # Fetch full issue details and generate embedding
                     client = self.get_jira_client()
                     issue = client.issue(issue_data["key"])
                     issue_content = self._parse_issue(issue)
 
-                    # Generate and store embedding
-                    if issue_content.context:
-                        created, updated = self._store_issue_embeddings([issue_content])
+                    status_map = self._build_embedding_status_map()
+                    matches = self._matches_selected_status(
+                        issue_content, status_map
+                    )
 
-                        # Update resource profile if assignee exists
+                    if matches and issue_content.context:
+                        created, updated = self._store_issue_embeddings(
+                            [issue_content]
+                        )
                         if issue_content.assignee:
-                            self._update_resource_profiles_from_vectors([issue_content])
-
+                            self._update_resource_profiles_from_vectors(
+                                [issue_content]
+                            )
                         self.db.commit()
-
                         result["processed"] = True
                         result["issue_key"] = issue.key
                         result["action"] = "created" if created > 0 else "updated"
+                    else:
+                        deleted = (
+                            self.db.query(JiraIssueVector)
+                            .filter(
+                                cast(
+                                    Any,
+                                    JiraIssueVector.issue_id == issue_content.issue_id,
+                                )
+                            )
+                            .delete()
+                        )
+                        if deleted:
+                            self.db.commit()
+                        result["processed"] = True
+                        result["issue_key"] = issue.key
+                        result["action"] = "skipped_status_not_selected"
 
             elif event_type == "jira:issue_deleted":
                 issue_data = payload.get("issue")
                 if issue_data:
                     issue_id = issue_data.get("id")
-                    # Delete vector from database
                     self.db.query(JiraIssueVector).filter(
                         cast(Any, JiraIssueVector.issue_id == issue_id)
                     ).delete()
                     self.db.commit()
-
                     result["processed"] = True
                     result["action"] = "deleted"
 
