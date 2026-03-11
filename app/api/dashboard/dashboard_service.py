@@ -12,15 +12,21 @@ from app.api.dashboard.dashboard_schema import (
     ConnectedIntegrationsCard,
     ContributorPRCount,
     DashboardResponse,
+    DomainCount,
     GitHubPRStatsCard,
     JiraTaskStatsCard,
     PendingAssignmentsCard,
+    ProfileIntegrationsCard,
+    ProfileSkillsCard,
+    ProfileWorkloadCard,
     ProjectTaskCount,
     RepoPRCount,
     ResourceUtilizationStatus,
+    SkillCount,
     TeamAllocation,
     TeamMembersCard,
     TeamUtilizationCard,
+    UserWorkload,
 )
 
 
@@ -231,4 +237,93 @@ def get_jira_task_stats(session: Session) -> JiraTaskStatsCard:
         unassigned_tasks=unassigned_count,
         tasks_by_project=tasks_by_project,
         top_assignees=top_assignees,
+    )
+
+
+def get_profile_skills(session: Session) -> ProfileSkillsCard:
+    """Aggregate skills and domains from all resource profiles."""
+    profiles = session.exec(select(ResourceProfile)).all()
+
+    skill_counts: dict[str, int] = {}
+    domain_counts: dict[str, int] = {}
+
+    for profile in profiles:
+        for skill in profile.skills_list:
+            skill_clean = skill.strip()
+            if skill_clean:
+                skill_counts[skill_clean] = skill_counts.get(skill_clean, 0) + 1
+
+        for domain in profile.domains_list:
+            domain_clean = domain.strip()
+            if domain_clean:
+                domain_counts[domain_clean] = domain_counts.get(domain_clean, 0) + 1
+
+    top_skills = [
+        SkillCount(name=k, count=v)
+        for k, v in sorted(skill_counts.items(), key=lambda item: -item[1])[:10]
+    ]
+
+    top_domains = [
+        DomainCount(name=k, count=v)
+        for k, v in sorted(domain_counts.items(), key=lambda item: -item[1])[:10]
+    ]
+
+    return ProfileSkillsCard(top_skills=top_skills, top_domains=top_domains)
+
+
+def get_profile_workload(session: Session) -> ProfileWorkloadCard:
+    """Analyze team workload capacity and distribution."""
+    # We join with User to get the actual names
+    statement = select(ResourceProfile, User).join(User)
+    results = session.exec(statement).all()
+
+    total_jira = 0
+    total_github = 0
+    overloaded = []
+    idle = []
+
+    WORKLOAD_THRESHOLD = 15
+
+    for profile, user in results:
+        total_jira += profile.jira_workload
+        total_github += profile.github_workload
+
+        user_data = UserWorkload(
+            user_id=str(user.id),
+            name=user.full_name,
+            jira_workload=profile.jira_workload,
+            github_workload=profile.github_workload,
+            total_workload=profile.total_workload,
+        )
+
+        if profile.total_workload >= WORKLOAD_THRESHOLD:
+            overloaded.append(user_data)
+        elif profile.total_workload == 0:
+            idle.append(user_data)
+
+    # Sort the lists
+    overloaded.sort(key=lambda x: -x.total_workload)
+    idle.sort(key=lambda x: user.full_name or "")
+
+    return ProfileWorkloadCard(
+        jira_vs_github_split={"jira": total_jira, "github": total_github},
+        overloaded_members=overloaded,
+        idle_members=idle,
+    )
+
+
+def get_profile_integrations(session: Session) -> ProfileIntegrationsCard:
+    """Count how many users have connected Jira/GitHub accounts."""
+    profiles = session.exec(select(ResourceProfile)).all()
+    
+    jira_connected = sum(1 for p in profiles if p.has_jira)
+    github_connected = sum(1 for p in profiles if p.has_github)
+    
+    total = len(profiles)
+
+    return ProfileIntegrationsCard(
+        jira_connected=jira_connected,
+        jira_unconnected=total - jira_connected,
+        github_connected=github_connected,
+        github_unconnected=total - github_connected,
     )

@@ -87,3 +87,41 @@ class JiraTaskStatsCard(BaseModel):
     unassigned_tasks: int
     tasks_by_project: list[ProjectTaskCount]
     top_assignees: list[AssigneeTaskCount]
+
+
+# --- Profile Data Endpoints ---
+
+class SkillCount(BaseModel):
+    name: str
+    count: int
+
+
+class DomainCount(BaseModel):
+    name: str
+    count: int
+
+
+class ProfileSkillsCard(BaseModel):
+    top_skills: list[SkillCount]
+    top_domains: list[DomainCount]
+
+
+class UserWorkload(BaseModel):
+    user_id: str
+    name: str
+    jira_workload: int
+    github_workload: int
+    total_workload: int
+
+
+class ProfileWorkloadCard(BaseModel):
+    jira_vs_github_split: dict[str, int]  # {"jira": 50, "github": 20}
+    overloaded_members: list[UserWorkload]
+    idle_members: list[UserWorkload]
+
+
+class ProfileIntegrationsCard(BaseModel):
+    jira_connected: int
+    jira_unconnected: int
+    github_connected: int
+    github_unconnected: int
