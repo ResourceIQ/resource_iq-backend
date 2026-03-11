@@ -50,8 +50,10 @@ class ResourceProfileResponse(BaseModel):
     user_id: uuid.UUID
     phone_number: str | None = None
     address: str | None = None
+    position:str | None = None
 
     # Jira
+    
     jira_account_id: str | None = None
     jira_display_name: str | None = None
     jira_email: str | None = None
