@@ -49,10 +49,11 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
     else:
         util_msg = "Capacity available"
 
-    # ---- 3. Active Tasks (from workload data) ----
-    total_workload = sum(p.total_workload for p in profiles)
-    # completed_this_week: you can track this via Jira webhook events
-    # For now, placeholder = 0
+    # ---- 3. Active Tasks (Total synced from Jira) ----
+    from app.api.embedding.embedding_model import JiraIssueVector
+    total_jira_tasks = session.exec(select(func.count()).select_from(JiraIssueVector)).one()
+    
+    # Real 0 from DB (not yet tracked in vectors)
     completed_this_week = 0
 
     # ---- 4. Pending Assignments ----
@@ -80,7 +81,7 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
             percentage=utilization_pct, message=util_msg
         ),
         active_tasks=ActiveTasksCard(
-            active_count=total_workload, completed_this_week=completed_this_week
+            active_count=total_jira_tasks, completed_this_week=completed_this_week
         ),
         pending_assignments=PendingAssignmentsCard(
             count=pending,
