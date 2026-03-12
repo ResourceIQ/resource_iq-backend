@@ -156,12 +156,18 @@ class Settings(BaseSettings):
             slug = slug.split("/")[-1]
         return f"https://github.com/apps/{slug}/installations/new"
 
-    JINA_API_KEY: str
+    JINA_API_KEY: str | None = None
     JINA_API_URL: str = "https://api.jina.ai"
     JINA_EMBEDDING_MODEL1: str = "jina-code-embeddings-0.5b"  # API model (1536 dims)
     JINA_EMBEDDING_MODEL2: str = "jinaai/jina-code-embeddings-0.5b"  # Local model
     USE_JINA_API: bool = False
     EMBEDDING_DIMENSION: int = 1536  # Must match database Vector(dim=1536)
+
+    @model_validator(mode="after")
+    def _validate_jina_settings(self) -> Self:
+        if self.USE_JINA_API and not self.JINA_API_KEY:
+            raise ValueError("JINA_API_KEY is required when USE_JINA_API is True")
+        return self
 
     # Google Cloud / Vertex AI
     GCP_PROJECT_ID: str | None = None

@@ -24,6 +24,10 @@ class VectorEmbeddingService:
         self.use_api = use_api
 
         if use_api:
+            if not settings.JINA_API_KEY:
+                raise ValueError(
+                    "JINA_API_KEY is required when embeddings are configured to use the Jina API"
+                )
             self.api_key = settings.JINA_API_KEY
             self.api_url = f"{settings.JINA_API_URL}/v1/embeddings"
             self.embedding_model = settings.JINA_EMBEDDING_MODEL1
