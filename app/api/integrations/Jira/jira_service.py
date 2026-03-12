@@ -24,13 +24,11 @@ from app.api.integrations.Jira.jira_model import (
     JiraOrgIntegration,
 )
 from app.api.integrations.Jira.jira_schema import (
-    DeveloperWorkload,
     JiraAuthCallbackResponse,
     JiraAuthConnectResponse,
     JiraComment,
     JiraIssueContent,
     JiraIssueTypeStatusResponse,
-    JiraOpenIssue,
     JiraSyncResponse,
     JiraUser,
 )
@@ -477,100 +475,6 @@ class JiraIntegrationService:
         except httpx.RequestError as e:
             raise ValueError(f"HTTP error fetching users: {str(e)}")
 
-    def get_project_users(
-        self, project_key: str, max_results: int = 100
-    ) -> list[dict[str, Any]]:
-        """Retrieve all users who are members/assignable in a specific project."""
-        client = self.get_jira_client()
-
-        auth_header = client._session.headers.get("Authorization")
-        if not auth_header:
-            raise ValueError("No Authorization header in session")
-
-        server = client._options["server"]
-        headers = {
-            "Authorization": auth_header,
-            "Accept": "application/json",
-        }
-
-        try:
-            # Use user/assignable/search to get users assignable to issues in project
-            resp = httpx.get(
-                f"{server}/rest/api/3/user/assignable/search",
-                headers=headers,
-                params={"project": project_key, "maxResults": max_results},
-                timeout=15,
-            )
-
-            if resp.status_code == 401:
-                raise ValueError("OAuth token is invalid or unauthorized")
-            elif resp.status_code == 404:
-                raise ValueError(f"Project '{project_key}' not found")
-            elif resp.status_code != 200:
-                raise ValueError(
-                    f"Failed to fetch project users: HTTP {resp.status_code} - {resp.text}"
-                )
-
-            users = resp.json()
-            return [
-                {
-                    "account_id": u.get("accountId"),
-                    "display_name": u.get("displayName"),
-                    "email": u.get("emailAddress"),
-                    "avatar_url": u.get("avatarUrls", {}).get("48x48"),
-                    "active": u.get("active", True),
-                    "account_type": u.get("accountType"),
-                }
-                for u in users
-            ]
-        except httpx.RequestError as e:
-            raise ValueError(f"HTTP error fetching project users: {str(e)}")
-
-    def get_user_by_account_id(self, account_id: str) -> dict[str, Any]:
-        """Retrieve a specific Jira user by their account ID."""
-        client = self.get_jira_client()
-
-        auth_header = client._session.headers.get("Authorization")
-        if not auth_header:
-            raise ValueError("No Authorization header in session")
-
-        server = client._options["server"]
-        headers = {
-            "Authorization": auth_header,
-            "Accept": "application/json",
-        }
-
-        try:
-            resp = httpx.get(
-                f"{server}/rest/api/3/user",
-                headers=headers,
-                params={"accountId": account_id},
-                timeout=10,
-            )
-
-            if resp.status_code == 401:
-                raise ValueError("OAuth token is invalid or unauthorized")
-            elif resp.status_code == 404:
-                raise ValueError(f"User with account ID '{account_id}' not found")
-            elif resp.status_code != 200:
-                raise ValueError(
-                    f"Failed to fetch user: HTTP {resp.status_code} - {resp.text}"
-                )
-
-            u = resp.json()
-            return {
-                "account_id": u.get("accountId"),
-                "display_name": u.get("displayName"),
-                "email": u.get("emailAddress"),
-                "avatar_url": u.get("avatarUrls", {}).get("48x48"),
-                "active": u.get("active", True),
-                "account_type": u.get("accountType"),
-                "timezone": u.get("timeZone"),
-                "locale": u.get("locale"),
-            }
-        except httpx.RequestError as e:
-            raise ValueError(f"HTTP error fetching user: {str(e)}")
-
     def fetch_issues(
         self,
         project_key: str | None = None,
@@ -618,52 +522,6 @@ class JiraIntegrationService:
         )
 
         return list(issues)
-
-    def get_open_issues(
-        self,
-        project_key: str | None = None,
-        max_results: int = 100,
-    ) -> list[JiraOpenIssue]:
-        """
-        Fetch all open (non-Done/Closed/Resolved) Jira issues.
-
-        Returns a lightweight list containing issue_id, issue_key,
-        title (summary), description, status, and priority.
-
-        Args:
-            project_key: Optionally restrict to a single project.
-            max_results: Maximum number of issues to return.
-        """
-        jql_parts = ['status NOT IN ("Done", "Closed", "Resolved")']
-        if project_key:
-            jql_parts.insert(0, f'project = "{project_key}"')
-        jql = " AND ".join(jql_parts) + " ORDER BY created DESC"
-
-        issues = self.fetch_issues(
-            jql=jql,
-            max_results=max_results,
-            include_closed=False,
-        )
-
-        result: list[JiraOpenIssue] = []
-        for issue in issues:
-            fields = issue.fields
-            raw_desc = getattr(fields, "description", None)
-            # Jira Cloud returns ADF (dict) for description; fall back to None
-            description: str | None = raw_desc if isinstance(raw_desc, str) else None
-
-            result.append(
-                JiraOpenIssue(
-                    issue_id=issue.id,
-                    issue_key=issue.key,
-                    title=fields.summary,
-                    description=description,
-                    status=fields.status.name if fields.status else "Unknown",
-                    priority=fields.priority.name if fields.priority else None,
-                )
-            )
-
-        return result
 
     def fetch_issue_types(self) -> list[dict[str, Any]]:
         """Fetch all issue types from the Jira instance."""
@@ -1226,35 +1084,6 @@ class JiraIntegrationService:
 
         return (created_count, updated_count)
 
-    def calculate_developer_workload(self, jira_account_id: str) -> DeveloperWorkload:
-        """
-        Calculate workload for a developer based on their vector entries.
-        Calculates workload score based on active issues.
-        Note: Full workload details require fetching live from Jira API.
-        """
-        # Get resource profile
-        profile = (
-            self.db.query(ResourceProfile)
-            .filter(cast(Any, ResourceProfile.jira_account_id == jira_account_id))
-            .first()
-        )
-
-        # Count vectors assigned to this developer
-        vector_count = (
-            self.db.query(JiraIssueVector)
-            .filter(cast(Any, JiraIssueVector.assignee_account_id == jira_account_id))
-            .count()
-        )
-
-        return DeveloperWorkload(
-            jira_account_id=jira_account_id,
-            display_name=profile.jira_display_name if profile else None,
-            email=profile.jira_email if profile else None,
-            total_active_issues=vector_count,
-            workload_score=float(vector_count),
-            last_updated=datetime.utcnow(),
-        )
-
     def _update_resource_profiles_from_vectors(
         self, issues: list[JiraIssueContent]
     ) -> None:
@@ -1298,87 +1127,6 @@ class JiraIntegrationService:
                 logger.warning(
                     f"Error updating resource profile for {account_id}: {str(e)}"
                 )
-
-    def get_all_developers(self) -> list[dict[str, Any]]:
-        """Get all users with Jira accounts connected."""
-        profiles = (
-            self.db.query(ResourceProfile)
-            .filter(cast(Any, ResourceProfile.jira_account_id).isnot(None))
-            .all()
-        )
-        return [
-            {
-                "user_id": str(p.user_id),
-                "jira_account_id": p.jira_account_id,
-                "display_name": p.jira_display_name,
-                "email": p.jira_email,
-                "github_login": p.github_login,
-                "jira_workload": p.jira_workload,
-                "github_workload": p.github_workload,
-                "total_workload": p.total_workload,
-                "skills": p.skills.split(",") if p.skills else [],
-                "domains": p.domains.split(",") if p.domains else [],
-            }
-            for p in profiles
-        ]
-
-    def search_similar_issues(
-        self,
-        query: str,
-        n_results: int = 5,
-        project_key: str | None = None,
-        assignee_account_id: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """
-        Search for similar Jira issues using vector similarity.
-        Useful for finding related issues or recommending developers.
-        """
-        try:
-            # Generate embedding for query
-            query_embedding = self.vector_service.generate_embeddings([query])[0]
-            query_embedding = self.vector_service._normalize_embedding_dimension(
-                query_embedding
-            )
-
-            # Build query
-            query_obj = self.db.query(JiraIssueVector)
-
-            if project_key:
-                query_obj = query_obj.filter(
-                    cast(Any, JiraIssueVector.project_key == project_key)
-                )
-
-            if assignee_account_id:
-                query_obj = query_obj.filter(
-                    cast(
-                        Any, JiraIssueVector.assignee_account_id == assignee_account_id
-                    )
-                )
-
-            # Order by similarity
-            results = (
-                query_obj.order_by(
-                    JiraIssueVector.embedding.l2_distance(query_embedding)
-                )
-                .limit(n_results)
-                .all()
-            )
-
-            return [
-                {
-                    "issue_id": r.issue_id,
-                    "issue_key": r.issue_key,
-                    "project_key": r.project_key,
-                    "assignee_account_id": r.assignee_account_id,
-                    "context": r.context,
-                    "created_at": r.created_at.isoformat() if r.created_at else None,
-                }
-                for r in results
-            ]
-
-        except Exception as e:
-            logger.error(f"Error searching similar issues: {str(e)}")
-            raise
 
     def process_webhook_event(
         self, event_type: str, payload: dict[str, Any]
