@@ -197,3 +197,25 @@ class UserMappingResponse(BaseModel):
     github_id: int | None
     internal_user_id: str | None
     mapped: bool
+
+
+class JiraIssueTypeStatusResponse(BaseModel):
+    """Response for a single issue type with its status configuration."""
+
+    id: int
+    issue_type_id: str
+    issue_type_name: str
+    available_statuses: list[str] = Field(default_factory=list)
+    selected_statuses: list[str] = Field(default_factory=list)
+
+    class Config:
+        from_attributes = True
+
+
+class JiraIssueTypeStatusUpdateRequest(BaseModel):
+    """Request to update which statuses qualify for embedding on an issue type."""
+
+    selected_statuses: list[str] = Field(
+        ...,
+        description="Statuses that qualify issues of this type for embedding",
+    )

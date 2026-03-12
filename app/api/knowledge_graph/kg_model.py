@@ -18,7 +18,8 @@ class SimilarityRel(StructuredRel):
 
 # --- Node Models ---
 class Resource(StructuredNode):
-    login = StringProperty(unique_index=True, required=True)
+    github_id = IntegerProperty(unique_index=True, required=True)
+    login = StringProperty(index=True)
 
 
 class Component(StructuredNode):
@@ -30,6 +31,26 @@ class File(StructuredNode):
 
 
 class Label(StructuredNode):
+    name = StringProperty(unique_index=True, required=True)
+
+
+class Language(StructuredNode):
+    name = StringProperty(unique_index=True, required=True)
+
+
+class Framework(StructuredNode):
+    name = StringProperty(unique_index=True, required=True)
+
+
+class Domain(StructuredNode):
+    slug = StringProperty(unique_index=True, required=True)
+
+
+class Skill(StructuredNode):
+    slug = StringProperty(unique_index=True, required=True)
+
+
+class Tool(StructuredNode):
     name = StringProperty(unique_index=True, required=True)
 
 
@@ -64,3 +85,10 @@ class PR(StructuredNode):
     modified_files = RelationshipTo("File", "MODIFIES")
     pr_labels = RelationshipTo("Label", "HAS_LABEL")
     similar_to = RelationshipTo("PR", "SIMILAR_TO", model=SimilarityRel)
+
+    # Entity extraction relationships
+    uses_language = RelationshipTo("Language", "USES_LANGUAGE")
+    uses_framework = RelationshipTo("Framework", "USES_FRAMEWORK")
+    touches_domain = RelationshipTo("Domain", "TOUCHES_DOMAIN")
+    demonstrates_skill = RelationshipTo("Skill", "DEMONSTRATES_SKILL")
+    uses_tool = RelationshipTo("Tool", "USES_TOOL")

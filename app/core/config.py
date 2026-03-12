@@ -142,6 +142,19 @@ class Settings(BaseSettings):
     GITHUB_APP_ID: int
     GITHUB_PRIVATE_KEY: str  # The full text of the .pem file
     GITHUB_WEBHOOK_SECRET: str
+    GITHUB_APP_SLUG: str | None = None  # e.g. "resourceiq-dev", used for install URL
+
+    @property
+    def github_app_install_url(self) -> str | None:
+        if not self.GITHUB_APP_SLUG:
+            return None
+        slug = self.GITHUB_APP_SLUG.strip().rstrip("/")
+        # Handle case where user sets full URL instead of just the slug
+        if slug.startswith("https://github.com/apps/"):
+            slug = slug.removeprefix("https://github.com/apps/")
+        if slug.startswith("http"):
+            slug = slug.split("/")[-1]
+        return f"https://github.com/apps/{slug}/installations/new"
 
     JINA_API_KEY: str
     JINA_API_URL: str = "https://api.jina.ai"
@@ -149,6 +162,11 @@ class Settings(BaseSettings):
     JINA_EMBEDDING_MODEL2: str = "jinaai/jina-code-embeddings-0.5b"  # Local model
     USE_JINA_API: bool = False
     EMBEDDING_DIMENSION: int = 1536  # Must match database Vector(dim=1536)
+
+    # Google Cloud / Vertex AI
+    GCP_PROJECT_ID: str | None = None
+    GCP_LOCATION: str = "us-central1"
+    GCP_CREDENTIALS_PATH: str | None = None
 
     # Jira Integration Settings
     JIRA_URL: str | None = None  # e.g., https://your-domain.atlassian.net
