@@ -93,6 +93,9 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
 
     # ---- 1. Team Members ----
     total_members = session.exec(select(func.count()).select_from(User)).one()
+    
+    developers = session.exec(select(func.count()).select_from(User).where(col(User.role) == "USER")).one()
+    admins = session.exec(select(func.count()).select_from(User).where(col(User.role) == "ADMIN")).one()
 
     month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0)
     new_this_month = session.exec(
@@ -148,7 +151,7 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
 
     return DashboardResponse(
         team_members=TeamMembersCard(
-            total=total_members, new_this_month=new_this_month
+            total=total_members, new_this_month=new_this_month,developers=developers,admins=admins
         ),
         team_utilization=TeamUtilizationCard(
             percentage=utilization_pct, message=util_msg
@@ -311,7 +314,7 @@ def get_profile_workload(session: Session) -> ProfileWorkloadCard:
 
     # Sort the lists
     overloaded.sort(key=lambda x: -x.total_workload)
-    idle.sort(key=lambda x: user.full_name or "")
+    idle.sort(key=lambda x: x.name or "")
 
     return ProfileWorkloadCard(
         jira_vs_github_split={"jira": total_jira, "github": total_github},
