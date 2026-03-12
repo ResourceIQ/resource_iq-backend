@@ -28,4 +28,4 @@ RUN uv sync --frozen --package app
 
 WORKDIR /app/
 
-CMD ["sh", "-c", "fastapi run --workers 4 --host 0.0.0.0 --port ${PORT:-8080} app/main.py"]
+CMD ["sh", "-c", "fastapi run --workers 1 --host 0.0.0.0 --port ${PORT:-8080} app/main.py"]
