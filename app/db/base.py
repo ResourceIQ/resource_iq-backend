@@ -8,6 +8,7 @@ from app.api.embedding.embedding_model import GitHubPRVector, JiraIssueVector  #
 
 # Jira integration models
 from app.api.integrations.Jira.jira_model import (  # noqa
+    JiraIssueTypeStatus,
     JiraOrgIntegration,
     JiraOAuthToken,
 )

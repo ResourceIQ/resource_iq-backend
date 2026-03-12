@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 
@@ -40,5 +41,34 @@ class JiraOAuthToken(SQLModel, table=True):
         default=None, description="Space-separated scopes granted by Atlassian"
     )
     token_type: str | None = Field(default="Bearer", description="Token type")
+    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+
+
+class JiraIssueTypeStatus(SQLModel, table=True):
+    """Per-issue-type configuration for embedding eligibility.
+
+    For each Jira issue type the admin selects which workflow statuses
+    qualify an issue for embedding.  Only issues whose current status
+    appears in ``selected_statuses`` are embedded into the vector store.
+    """
+
+    __tablename__ = "jira_issue_type_statuses"
+
+    id: int | None = Field(default=None, primary_key=True)
+    issue_type_id: str = Field(
+        ..., unique=True, index=True, description="Jira issue type ID"
+    )
+    issue_type_name: str = Field(..., description="Human-readable name (e.g. Bug)")
+    available_statuses: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False, server_default="[]"),
+        description="All workflow statuses available for this issue type",
+    )
+    selected_statuses: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False, server_default="[]"),
+        description="Statuses that qualify issues of this type for embedding",
+    )
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)

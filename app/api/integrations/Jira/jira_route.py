@@ -12,6 +12,8 @@ from app.api.integrations.Jira.jira_schema import (
     DeveloperWorkload,
     JiraAuthConnectResponse,
     JiraIssueContent,
+    JiraIssueTypeStatusResponse,
+    JiraIssueTypeStatusUpdateRequest,
     JiraOpenIssue,
     JiraSyncRequest,
     JiraSyncResponse,
@@ -122,6 +124,70 @@ async def disconnect_jira_auth(session: SessionDep) -> dict[str, str]:
         session.delete(token)
     session.commit()
     return {"message": "Jira disconnected successfully"}
+
+
+@router.post(
+    "/issue-type-statuses/sync",
+    response_model=list[JiraIssueTypeStatusResponse],
+)
+async def sync_issue_type_statuses(
+    session: SessionDep,
+) -> list[JiraIssueTypeStatusResponse]:
+    """Fetch issue types and their workflow statuses from Jira.
+    User-configured status selections are preserved across re-syncs."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.sync_issue_type_statuses()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to sync issue types: {str(e)}",
+        )
+
+
+@router.get(
+    "/issue-type-statuses",
+    response_model=list[JiraIssueTypeStatusResponse],
+)
+async def get_issue_type_statuses(
+    session: SessionDep,
+) -> list[JiraIssueTypeStatusResponse]:
+    """Return all issue types with their available and selected statuses."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_issue_type_statuses()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch issue type statuses: {str(e)}",
+        )
+
+
+@router.put(
+    "/issue-type-statuses/{issue_type_id}",
+    response_model=JiraIssueTypeStatusResponse,
+)
+async def update_issue_type_selected_statuses(
+    session: SessionDep,
+    issue_type_id: str,
+    body: JiraIssueTypeStatusUpdateRequest,
+) -> JiraIssueTypeStatusResponse:
+    """Update which statuses qualify for embedding on an issue type."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.update_issue_type_selected_statuses(
+            issue_type_id=issue_type_id,
+            selected_statuses=body.selected_statuses,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update issue type statuses: {str(e)}",
+        )
 
 
 @router.get("/projects")
