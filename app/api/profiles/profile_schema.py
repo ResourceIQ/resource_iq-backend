@@ -20,6 +20,8 @@ class ResourceProfileCreate(ResourceProfileBase):
     """Schema for creating a resource profile."""
 
     user_id: uuid.UUID
+    phone_number: str | None = None
+    address: str | None = None
 
 
 class JiraConnectionRequest(BaseModel):
@@ -46,8 +48,12 @@ class ResourceProfileResponse(BaseModel):
 
     id: int
     user_id: uuid.UUID
+    phone_number: str | None = None
+    address: str | None = None
+    position:str | None = None
 
     # Jira
+    
     jira_account_id: str | None = None
     jira_display_name: str | None = None
     jira_email: str | None = None

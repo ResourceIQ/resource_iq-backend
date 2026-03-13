@@ -27,6 +27,9 @@ def _to_response(profile: ResourceProfile) -> ResourceProfileResponse:
     return ResourceProfileResponse(
         id=profile.id or 0,
         user_id=profile.user_id,
+        phone_number=profile.phone_number,
+        address=profile.address,
+        position=profile.position,
         jira_account_id=profile.jira_account_id,
         jira_display_name=profile.jira_display_name,
         jira_email=profile.jira_email,
