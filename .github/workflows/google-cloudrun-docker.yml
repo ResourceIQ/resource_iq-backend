@@ -36,7 +36,6 @@ jobs:
 
       - name: 'Build and Push Container'
         run: |-
-          # Use env.SERVICE here to match the deploy step exactly
           DOCKER_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app:${{ github.sha }}"
           docker build -t "$DOCKER_TAG" .
           docker push "$DOCKER_TAG"
