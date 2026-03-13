@@ -67,9 +67,22 @@ class Settings(BaseSettings):
     NEO4J_PASSWORD: str | None = None
     NEO4J_DATABASE: str | None = None
 
+    CLOUD_SQL_CONNECTION_NAME: str | None = None
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
+        if self.CLOUD_SQL_CONNECTION_NAME:
+            return PostgresDsn.build(
+                scheme="postgresql+psycopg",
+                username=self.POSTGRES_USER,
+                password=self.POSTGRES_PASSWORD,
+                host="",
+                path=self.POSTGRES_DB,
+                query=f"host=/cloudsql/{self.CLOUD_SQL_CONNECTION_NAME}",
+            )
+
+        # LOCAL MODE (Neon/Docker)
         return PostgresDsn.build(
             scheme="postgresql+psycopg",
             username=self.POSTGRES_USER,
