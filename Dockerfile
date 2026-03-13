@@ -33,4 +33,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 WORKDIR /app/
 
-CMD ["fastapi", "run", "--workers", "1", "app/main.py"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers ${WEB_CONCURRENCY:-1}"]
