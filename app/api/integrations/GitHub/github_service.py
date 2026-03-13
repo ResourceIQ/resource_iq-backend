@@ -49,6 +49,11 @@ class GithubIntegrationService:
         if not self.credentials:
             raise Exception("GitHub integration credentials not found in database")
 
+        if not settings.GITHUB_APP_ID or not settings.GITHUB_PRIVATE_KEY:
+            raise Exception(
+                "Server configuration error: GitHub App ID or Private Key missing"
+            )
+
         app_auth = Auth.AppAuth(
             app_id=str(settings.GITHUB_APP_ID),
             private_key=settings.GITHUB_PRIVATE_KEY,
