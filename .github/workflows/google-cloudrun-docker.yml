@@ -15,7 +15,6 @@ env:
   WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WIF_PROVIDER }}
 
 jobs:
-  jobs:
   build-test:
     name: 'Build and Verify'
     runs-on: 'ubuntu-latest'
