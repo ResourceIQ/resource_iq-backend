@@ -50,7 +50,7 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str
     SENTRY_DSN: HttpUrl | None = None
-    POSTGRES_SERVER: str
+    POSTGRES_SERVER: str | None = None
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "$enujaImeth123"
@@ -68,6 +68,22 @@ class Settings(BaseSettings):
     NEO4J_DATABASE: str | None = None
 
     CLOUD_SQL_CONNECTION_NAME: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_database_connection_target(self) -> Self:
+        has_postgres_server = bool(
+            self.POSTGRES_SERVER and self.POSTGRES_SERVER.strip()
+        )
+        has_cloud_sql_socket = bool(
+            self.CLOUD_SQL_CONNECTION_NAME and self.CLOUD_SQL_CONNECTION_NAME.strip()
+        )
+
+        if not has_postgres_server and not has_cloud_sql_socket:
+            raise ValueError(
+                "Either POSTGRES_SERVER or CLOUD_SQL_CONNECTION_NAME must be set"
+            )
+
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property
