@@ -37,7 +37,7 @@ jobs:
 
       - name: 'Build and Push Container'
         run: |-
-          DOCKER_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}"
+          DOCKER_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app:${{ github.sha }}"
           DOCKER_BUILDKIT=1 docker build --tag "${DOCKER_TAG}" .
           docker push "${DOCKER_TAG}"
 
@@ -47,7 +47,7 @@ jobs:
         with:
           service: '${{ env.SERVICE }}'
           region: '${{ env.REGION }}'
-          image: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}'
+          image: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app:${{ github.sha }}'
 
       - name: 'Show output'
         run: echo ${{ steps.deploy.outputs.url }}
