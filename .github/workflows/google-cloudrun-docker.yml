@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: 'asia-south1'
@@ -35,7 +36,8 @@ jobs:
 
       - name: 'Build and Push Container'
         run: |-
-          DOCKER_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/resource-iq-be/app:${{ github.sha }}"
+          # Use env.SERVICE here to match the deploy step exactly
+          DOCKER_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app:${{ github.sha }}"
           docker build -t "$DOCKER_TAG" .
           docker push "$DOCKER_TAG"
 
@@ -53,5 +55,6 @@ jobs:
             --min-instances=0
             --max-instances=10
             --concurrency=80
+
       - name: 'Show output'
         run: echo ${{ steps.deploy.outputs.url }}
