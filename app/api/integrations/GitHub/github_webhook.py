@@ -16,6 +16,11 @@ async def github_webhook(request: Request, session: SessionDep) -> dict[str, str
     signature = request.headers.get("X-Hub-Signature-256")
     body = await request.body()
 
+    if not settings.GITHUB_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=500, detail="Server configuration error: Webhook secret missing"
+        )
+
     mac = hmac.new(
         key=settings.GITHUB_WEBHOOK_SECRET.encode(), msg=body, digestmod=hashlib.sha256
     )
