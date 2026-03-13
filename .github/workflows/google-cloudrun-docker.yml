@@ -24,6 +24,13 @@ jobs:
 
       - name: 'Test Docker Build'
         run: docker build . -t test-build
+      - name: 'Check for Migration Branches'
+        run: |
+          # We run 'alembic heads' inside the container we just built.
+          # If it returns more than one line, the command fails.
+          docker run --entrypoint /bin/bash test-build -c "alembic heads | wc -l | grep -q '^1$'" || \
+          (echo "ERROR: Multiple Alembic heads detected! You must merge your migration branches." && \
+           docker run --entrypoint /bin/bash test-build -c "alembic heads" && exit 1)
 
   deploy:
     if: github.event_name != 'pull_request'
