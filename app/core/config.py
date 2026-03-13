@@ -89,13 +89,9 @@ class Settings(BaseSettings):
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
         if self.CLOUD_SQL_CONNECTION_NAME:
-            return PostgresDsn.build(
-                scheme="postgresql+psycopg",
-                username=self.POSTGRES_USER,
-                password=self.POSTGRES_PASSWORD,
-                host="",
-                path=self.POSTGRES_DB,
-                query=f"host=/cloudsql/{self.CLOUD_SQL_CONNECTION_NAME}",
+            return (
+                f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+                f"@/{self.POSTGRES_DB}?host=/cloudsql/{self.CLOUD_SQL_CONNECTION_NAME}"
             )
 
         # LOCAL MODE (Neon/Docker)
