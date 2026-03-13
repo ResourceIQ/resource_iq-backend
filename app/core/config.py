@@ -165,9 +165,9 @@ class Settings(BaseSettings):
 
         return self
 
-    GITHUB_APP_ID: int
-    GITHUB_PRIVATE_KEY: str  # The full text of the .pem file
-    GITHUB_WEBHOOK_SECRET: str
+    GITHUB_APP_ID: int | None = None
+    GITHUB_PRIVATE_KEY: str | None = None  # The full text of the .pem file
+    GITHUB_WEBHOOK_SECRET: str | None = None
     GITHUB_APP_SLUG: str | None = None  # e.g. "resourceiq-dev", used for install URL
 
     @property
