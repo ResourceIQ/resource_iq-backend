@@ -930,13 +930,13 @@ class JiraIntegrationService:
 
         if generate_embeddings and embedding_eligible:
             try:
-                vectors_created, vectors_updated = self._store_issue_embeddings(
+                vectors_created, vectors_skipped = self._store_issue_embeddings(
                     embedding_eligible
                 )
-                embeddings_generated = vectors_created + vectors_updated
+                embeddings_generated = vectors_created + vectors_skipped
                 logger.info(
-                    f"Embeddings: {embeddings_generated} from "
-                    f"{len(embedding_eligible)}/{len(all_issue_contents)} "
+                    f"Embeddings: {vectors_created} new, {vectors_skipped} skipped (already embedded), "
+                    f"from {len(embedding_eligible)}/{len(all_issue_contents)} "
                     f"status-matched issues"
                 )
             except Exception as e:
@@ -982,7 +982,7 @@ class JiraIntegrationService:
         self, issues: list[JiraIssueContent]
     ) -> tuple[int, int]:
         """
-        Generate and store embeddings for issues.
+        Generate and store embeddings for issues, skipping already embedded ones.
 
         The embedding generation step (model inference) can take many minutes.
         To avoid PostgreSQL killing the idle-in-transaction connection we:
@@ -992,17 +992,44 @@ class JiraIntegrationService:
         if not issues:
             return (0, 0)
 
-        contexts = [issue.context or "" for issue in issues if issue.context]
         valid_issues = [issue for issue in issues if issue.context]
 
-        if not contexts:
+        if not valid_issues:
             return (0, 0)
 
+        # --- Filter out already-embedded issues to save API calls ---------------
+        issue_ids = [issue.issue_id for issue in valid_issues]
+        existing_issue_ids: set[str] = set()
+
+        try:
+            issue_id_column = cast(Any, JiraIssueVector.issue_id)
+            existing_records = (
+                self.db.query(issue_id_column)
+                .filter(issue_id_column.in_(issue_ids))
+                .all()
+            )
+            existing_issue_ids = {r[0] for r in existing_records}
+        except Exception as e:
+            logger.warning(
+                f"Failed to check existing issue vectors, proceeding with full list: {e}"
+            )
+
+        new_issues = [
+            issue for issue in valid_issues if issue.issue_id not in existing_issue_ids
+        ]
+        skipped_count = len(valid_issues) - len(new_issues)
+
+        if skipped_count > 0:
+            logger.info(
+                f"Skipped {skipped_count} already-embedded Jira issues. Processing {len(new_issues)} new issues."
+            )
+
+        if not new_issues:
+            return (0, skipped_count)
+
+        contexts = [issue.context or "" for issue in new_issues]
+
         # --- Phase 1: release the DB connection before long compute -------------
-        #     commit() ends the transaction; close() returns the connection to
-        #     the pool.  On next use SQLAlchemy will check out a fresh (and
-        #     pool_pre_ping-verified) connection, avoiding stale-socket errors
-        #     after minutes of idle time.
         try:
             self.db.commit()
         except Exception:
@@ -1010,60 +1037,80 @@ class JiraIntegrationService:
         self.db.close()
 
         # --- Phase 2: generate embeddings (pure compute, no DB) ---------------
+        embeddings: list[list[float] | None] = []
         try:
-            embeddings = self.vector_service.generate_embeddings(contexts)
+            raw = self.vector_service.generate_embeddings(contexts)
+            embeddings = cast(list[list[float] | None], raw)
         except Exception as e:
             logger.warning(f"Batch embedding failed, processing individually: {str(e)}")
             embeddings = []
-            for context in contexts:
+            for i, context in enumerate(contexts):
                 try:
-                    embedding = self.vector_service.generate_embeddings([context])[0]
-                    embeddings.append(embedding)
-                except Exception as doc_error:
-                    logger.error(f"Failed to embed context: {str(doc_error)}")
+                    generated_embedding = self.vector_service.generate_embeddings(
+                        [context]
+                    )[0]
+                    embeddings.append(generated_embedding)
+                except Exception:
+                    logger.warning(
+                        f"Initial embedding failed for {new_issues[i].issue_key}. Retrying with shorter text..."
+                    )
+                    try:
+                        short_context = context[:1000] + "... [truncated]"
+                        generated_embedding = self.vector_service.generate_embeddings(
+                            [short_context]
+                        )[0]
+                        embeddings.append(generated_embedding)
+                        logger.info(
+                            f"Successfully embedded truncated version of {new_issues[i].issue_key}"
+                        )
+                    except Exception:
+                        # Emergency fallback: use issue key + summary only
+                        try:
+                            minimal = f"Issue: {new_issues[i].issue_key} - {new_issues[i].summary}"
+                            minimal = self.vector_service._clean_text_for_embedding(
+                                minimal
+                            )
+                            generated_embedding = (
+                                self.vector_service.generate_embeddings([minimal])[0]
+                            )
+                            embeddings.append(generated_embedding)
+                            logger.info(
+                                f"Successfully used minimal fallback for {new_issues[i].issue_key}"
+                            )
+                        except Exception as final_error:
+                            logger.error(
+                                f"Final failure to embed {new_issues[i].issue_key}: {str(final_error)}"
+                            )
+                            embeddings.append(None)
 
         # --- Phase 3: write to DB in batches with per-item recovery -----------
         created_count = 0
-        updated_count = 0
         batch_size = 10
 
         for idx, (issue, embedding) in enumerate(
-            zip(valid_issues, embeddings, strict=False)
+            zip(new_issues, embeddings, strict=False)
         ):
+            if embedding is None:
+                continue
+
             try:
-                embedding = self.vector_service._normalize_embedding_dimension(
+                normalized = self.vector_service._normalize_embedding_dimension(
                     embedding
                 )
 
-                existing = (
-                    self.db.query(JiraIssueVector)
-                    .filter(cast(Any, JiraIssueVector.issue_id == issue.issue_id))
-                    .first()
-                )
-
-                if existing:
-                    existing.embedding = embedding
-                    existing.context = issue.context or ""
-                    existing.issue_key = issue.issue_key
-                    existing.project_key = issue.project_key
-                    existing.assignee_account_id = (
+                # We already know these are new, so just create
+                db_vector = JiraIssueVector(
+                    issue_id=issue.issue_id,
+                    issue_key=issue.issue_key,
+                    project_key=issue.project_key,
+                    assignee_account_id=(
                         issue.assignee.account_id if issue.assignee else None
-                    )
-                    existing.updated_at = datetime.utcnow()
-                    updated_count += 1
-                else:
-                    db_vector = JiraIssueVector(
-                        issue_id=issue.issue_id,
-                        issue_key=issue.issue_key,
-                        project_key=issue.project_key,
-                        assignee_account_id=(
-                            issue.assignee.account_id if issue.assignee else None
-                        ),
-                        embedding=embedding,
-                        context=issue.context or "",
-                    )
-                    self.db.add(db_vector)
-                    created_count += 1
+                    ),
+                    embedding=normalized,
+                    context=issue.context or "",
+                )
+                self.db.add(db_vector)
+                created_count += 1
 
                 if (idx + 1) % batch_size == 0:
                     self.db.commit()
@@ -1082,7 +1129,10 @@ class JiraIntegrationService:
             logger.error(f"Error committing final embedding batch: {str(e)}")
             self.db.rollback()
 
-        return (created_count, updated_count)
+        logger.info(
+            f"Stored {created_count} new Jira issue vectors. Skipped {skipped_count} existing."
+        )
+        return (created_count, skipped_count)
 
     def _update_resource_profiles_from_vectors(
         self, issues: list[JiraIssueContent]
@@ -1152,13 +1202,17 @@ class JiraIntegrationService:
                     matches = self._matches_selected_status(issue_content, status_map)
 
                     if matches and issue_content.context:
-                        created, updated = self._store_issue_embeddings([issue_content])
+                        created, skipped = self._store_issue_embeddings([issue_content])
                         if issue_content.assignee:
                             self._update_resource_profiles_from_vectors([issue_content])
                         self.db.commit()
                         result["processed"] = True
                         result["issue_key"] = issue.key
-                        result["action"] = "created" if created > 0 else "updated"
+                        result["action"] = (
+                            "created"
+                            if created > 0
+                            else ("skipped" if skipped > 0 else "no_match")
+                        )
                     else:
                         deleted = (
                             self.db.query(JiraIssueVector)
