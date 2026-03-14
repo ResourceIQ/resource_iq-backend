@@ -209,8 +209,39 @@ class VectorEmbeddingService:
             logger.info(f"No PR contexts to store for author {author.login}")
             return 0
 
-        # Prepare pr_context for embedding
-        pr_contexts = [pr.context or "" for pr in pr_contents]
+        # Filter out PRs that are already embedded to save API calls
+        pr_ids = [str(pr.id) for pr in pr_contents]
+        existing_pr_ids: set[str] = set()
+
+        try:
+            # Query existing PR IDs efficiently
+            existing_records = (
+                self.db.query(GitHubPRVector.pr_id)
+                .filter(GitHubPRVector.pr_id.in_(pr_ids))
+                .all()
+            )
+            existing_pr_ids = {r[0] for r in existing_records}
+        except Exception as e:
+            logger.warning(
+                f"Failed to check existing PRs, proceeding with full list: {e}"
+            )
+
+        # Keep only new PRs
+        new_pr_contents = [
+            pr for pr in pr_contents if str(pr.id) not in existing_pr_ids
+        ]
+        skipped_count = len(pr_contents) - len(new_pr_contents)
+
+        if skipped_count > 0:
+            logger.info(
+                f"Skipped {skipped_count} existing PR embeddings for {author.login}. Processing {len(new_pr_contents)} new PRs."
+            )
+
+        if not new_pr_contents:
+            return skipped_count
+
+        # Prepare pr_context for embedding (using only new PRs)
+        pr_contexts = [pr.context or "" for pr in new_pr_contents]
         embeddings: list[list[float] | None] = []
 
         # Generate embeddings with fallback to local model if API fails
@@ -228,7 +259,7 @@ class VectorEmbeddingService:
                     embeddings.append(single_embedding)
                 except Exception:
                     logger.warning(
-                        f"Initial embedding failed for PR {pr_contents[i].number}. Retrying with shorter text..."
+                        f"Initial embedding failed for PR {new_pr_contents[i].number}. Retrying with shorter text..."
                     )
                     try:
                         # Try very aggressive truncation as last resort (1000 chars)
@@ -236,69 +267,56 @@ class VectorEmbeddingService:
                         single_embedding = self.generate_embeddings([short_doc])[0]
                         embeddings.append(single_embedding)
                         logger.info(
-                            f"Successfully embedded truncated version of PR {pr_contents[i].number}"
+                            f"Successfully embedded truncated version of PR {new_pr_contents[i].number}"
                         )
                     except Exception:
                         # Emergency fallback - use minimal text (title) to ensure we get a vector
                         try:
                             logger.info(
-                                f"Attempting emergency fallback for PR {pr_contents[i].number} using title only"
+                                f"Attempting emergency fallback for PR {new_pr_contents[i].number} using title only"
                             )
-                            minimal_doc = f"PR: {pr_contents[i].title}"
+                            minimal_doc = f"PR: {new_pr_contents[i].title}"
                             minimal_doc = self._clean_text_for_embedding(minimal_doc)
                             single_embedding = self.generate_embeddings([minimal_doc])[
                                 0
                             ]
                             embeddings.append(single_embedding)
                             logger.info(
-                                f"Successfully used minimal fallback for PR {pr_contents[i].number}"
+                                f"Successfully used minimal fallback for PR {new_pr_contents[i].number}"
                             )
                         except Exception as final_error:
                             logger.error(
-                                f"Final failure to embed PR {pr_contents[i].number} for {author.login}: {str(final_error)}"
+                                f"Final failure to embed PR {new_pr_contents[i].number} for {author.login}: {str(final_error)}"
                             )
                             embeddings.append(None)
 
         success_count = 0
         # Store in database
-        for pr, embedding in zip(pr_contents, embeddings, strict=False):
+        for pr, embedding in zip(new_pr_contents, embeddings, strict=False):
             if embedding is None:
                 continue
 
             try:
-                # Check if already exists
-                pr_filter = cast(Any, GitHubPRVector.pr_id == str(pr.id))
-                existing = self.db.query(GitHubPRVector).filter(pr_filter).first()
-
-                if existing:
-                    # Update existing
-                    existing.embedding = embedding
-                    existing.context = pr.context or ""
-                    existing.pr_url = str(pr.html_url)
-                    existing.pr_title = pr.title
-                    existing.pr_description = pr.body or ""
-                    logger.debug(f"Updated PR {pr.number}")
-                else:
-                    # Create new
-                    db_pr_vector = GitHubPRVector(
-                        pr_id=str(pr.id),
-                        pr_number=pr.number,
-                        author_login=pr.author.login,
-                        author_id=pr.author.id,
-                        repo_id=pr.repo_id,
-                        repo_name=pr.repo_name or "",
-                        pr_title=pr.title,
-                        pr_url=str(pr.html_url),
-                        pr_description=pr.body or "",
-                        embedding=embedding,
-                        context=pr.context or "",
-                        metadata_json={
-                            "changed_files": pr.changed_files or [],
-                            "labels": pr.labels or [],
-                        },
-                    )
-                    self.db.add(db_pr_vector)
-                    logger.debug(f"Created PR {pr.number}")
+                # We already know these are new, so just create
+                db_pr_vector = GitHubPRVector(
+                    pr_id=str(pr.id),
+                    pr_number=pr.number,
+                    author_login=pr.author.login,
+                    author_id=pr.author.id,
+                    repo_id=pr.repo_id,
+                    repo_name=pr.repo_name or "",
+                    pr_title=pr.title,
+                    pr_url=str(pr.html_url),
+                    pr_description=pr.body or "",
+                    embedding=embedding,
+                    context=pr.context or "",
+                    metadata_json={
+                        "changed_files": pr.changed_files or [],
+                        "labels": pr.labels or [],
+                    },
+                )
+                self.db.add(db_pr_vector)
+                logger.debug(f"Created PR {pr.number}")
 
                 success_count += 1
 
@@ -308,8 +326,9 @@ class VectorEmbeddingService:
                 continue
 
         self.db.commit()
-        logger.info(f"Stored {success_count} PR vectors for {author.login}")
-        return success_count
+        logger.info(f"Stored {success_count} new PR vectors for {author.login}")
+        # Return total processed (skipped + newly stored) so the caller gets accurate "synced" count
+        return success_count + skipped_count
 
     def _normalize_embedding_dimension(self, embedding: list[float]) -> list[float]:
         """Normalize embedding to configured dimensions (default 1536)."""
