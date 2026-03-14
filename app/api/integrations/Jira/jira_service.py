@@ -24,9 +24,13 @@ from app.api.integrations.Jira.jira_model import (
     JiraOrgIntegration,
 )
 from app.api.integrations.Jira.jira_schema import (
+    JiraAssignIssueRequest,
+    JiraAssignIssueResponse,
     JiraAuthCallbackResponse,
     JiraAuthConnectResponse,
     JiraComment,
+    JiraCreateIssueRequest,
+    JiraCreateIssueResponse,
     JiraIssueContent,
     JiraIssueTypeStatusResponse,
     JiraSyncResponse,
@@ -1177,6 +1181,123 @@ class JiraIntegrationService:
                 logger.warning(
                     f"Error updating resource profile for {account_id}: {str(e)}"
                 )
+
+    def create_issue(self, request: JiraCreateIssueRequest) -> JiraCreateIssueResponse:
+        """Create a Jira issue and optionally assign it to a user."""
+        client = self.get_jira_client()
+        auth_header = client._session.headers.get("Authorization")
+        if not auth_header:
+            raise ValueError("No Authorization header in session")
+
+        server = client._options["server"]
+        headers = {
+            "Authorization": auth_header,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+        assignee_account_id: str | None = None
+        assignee_display_name: str | None = None
+
+        if request.assignee_user_id:
+            profile = (
+                self.db.query(ResourceProfile)
+                .filter(
+                    cast(
+                        Any,
+                        ResourceProfile.user_id == request.assignee_user_id,
+                    )
+                )
+                .first()
+            )
+            if not profile or not profile.jira_account_id:
+                raise ValueError("User does not have a connected Jira account")
+            assignee_account_id = profile.jira_account_id
+            assignee_display_name = profile.jira_display_name
+
+        issue_fields: dict[str, Any] = {
+            "project": {"key": request.project_key},
+            "summary": request.summary,
+            "issuetype": {"name": request.issue_type},
+        }
+
+        if request.description:
+            issue_fields["description"] = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": request.description}],
+                    }
+                ],
+            }
+
+        if assignee_account_id:
+            issue_fields["assignee"] = {"id": assignee_account_id}
+
+        resp = httpx.post(
+            f"{server}/rest/api/3/issue",
+            headers=headers,
+            json={"fields": issue_fields},
+            timeout=15,
+        )
+
+        if resp.status_code not in (200, 201):
+            raise ValueError(
+                f"Failed to create issue: HTTP {resp.status_code} - {resp.text}"
+            )
+
+        data = resp.json()
+        issue_key = data.get("key", "")
+        issue_url = f"{self.jira_url}/browse/{issue_key}"
+
+        return JiraCreateIssueResponse(
+            issue_key=issue_key,
+            issue_url=issue_url,
+            summary=request.summary,
+            assigned_to=assignee_display_name,
+        )
+
+    def assign_issue(
+        self, issue_key: str, request: JiraAssignIssueRequest
+    ) -> JiraAssignIssueResponse:
+        """Assign or reassign a Jira issue to a user."""
+        client = self.get_jira_client()
+        auth_header = client._session.headers.get("Authorization")
+        if not auth_header:
+            raise ValueError("No Authorization header in session")
+
+        profile = (
+            self.db.query(ResourceProfile)
+            .filter(cast(Any, ResourceProfile.user_id == request.assignee_user_id))
+            .first()
+        )
+        if not profile or not profile.jira_account_id:
+            raise ValueError("User does not have a connected Jira account")
+
+        server = client._options["server"]
+        headers = {
+            "Authorization": auth_header,
+            "Content-Type": "application/json",
+        }
+
+        resp = httpx.put(
+            f"{server}/rest/api/3/issue/{issue_key}/assignee",
+            headers=headers,
+            json={"accountId": profile.jira_account_id},
+            timeout=15,
+        )
+
+        if resp.status_code not in (200, 204):
+            raise ValueError(
+                f"Failed to assign issue: HTTP {resp.status_code} - {resp.text}"
+            )
+
+        return JiraAssignIssueResponse(
+            issue_key=issue_key,
+            assigned_to=profile.jira_display_name,
+        )
 
     def process_webhook_event(
         self, event_type: str, payload: dict[str, Any]
