@@ -118,3 +118,45 @@ class JiraIssueTypeStatusUpdateRequest(BaseModel):
         ...,
         description="Statuses that qualify issues of this type for embedding",
     )
+
+
+class JiraCreateIssueRequest(BaseModel):
+    """Request schema for creating a Jira issue."""
+
+    project_key: str = Field(..., description="Jira project key (e.g. PROJ)")
+    summary: str = Field(..., description="Issue summary / title")
+    description: str | None = Field(default=None, description="Issue description")
+    issue_type: str = Field(default="Task", description="Issue type name")
+    assignee_user_id: str | None = Field(
+        default=None,
+        description="ResourceIQ user_id (UUID) to assign. Resolved to jira_account_id internally.",
+    )
+
+
+class JiraCreateIssueResponse(BaseModel):
+    """Response schema for a newly created Jira issue."""
+
+    issue_key: str = Field(..., description="Created issue key (e.g. PROJ-42)")
+    issue_url: str = Field(..., description="Browse URL for the issue")
+    summary: str
+    assigned_to: str | None = Field(
+        default=None, description="Display name of the assignee"
+    )
+
+
+class JiraAssignIssueRequest(BaseModel):
+    """Request schema for assigning / reassigning a Jira issue."""
+
+    assignee_user_id: str = Field(
+        ...,
+        description="ResourceIQ user_id (UUID) to assign.",
+    )
+
+
+class JiraAssignIssueResponse(BaseModel):
+    """Response after assigning a Jira issue."""
+
+    issue_key: str
+    assigned_to: str | None = Field(
+        default=None, description="Display name of the new assignee"
+    )
