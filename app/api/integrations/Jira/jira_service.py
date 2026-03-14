@@ -1002,9 +1002,10 @@ class JiraIntegrationService:
         existing_issue_ids: set[str] = set()
 
         try:
+            issue_id_column = cast(Any, JiraIssueVector.issue_id)
             existing_records = (
-                self.db.query(JiraIssueVector.issue_id)
-                .filter(JiraIssueVector.issue_id.in_(issue_ids))
+                self.db.query(issue_id_column)
+                .filter(issue_id_column.in_(issue_ids))
                 .all()
             )
             existing_issue_ids = {r[0] for r in existing_records}
@@ -1045,18 +1046,20 @@ class JiraIntegrationService:
             embeddings = []
             for i, context in enumerate(contexts):
                 try:
-                    embedding = self.vector_service.generate_embeddings([context])[0]
-                    embeddings.append(embedding)
+                    generated_embedding = self.vector_service.generate_embeddings(
+                        [context]
+                    )[0]
+                    embeddings.append(generated_embedding)
                 except Exception:
                     logger.warning(
                         f"Initial embedding failed for {new_issues[i].issue_key}. Retrying with shorter text..."
                     )
                     try:
                         short_context = context[:1000] + "... [truncated]"
-                        embedding = self.vector_service.generate_embeddings(
+                        generated_embedding = self.vector_service.generate_embeddings(
                             [short_context]
                         )[0]
-                        embeddings.append(embedding)
+                        embeddings.append(generated_embedding)
                         logger.info(
                             f"Successfully embedded truncated version of {new_issues[i].issue_key}"
                         )
@@ -1067,10 +1070,10 @@ class JiraIntegrationService:
                             minimal = self.vector_service._clean_text_for_embedding(
                                 minimal
                             )
-                            embedding = self.vector_service.generate_embeddings(
-                                [minimal]
-                            )[0]
-                            embeddings.append(embedding)
+                            generated_embedding = (
+                                self.vector_service.generate_embeddings([minimal])[0]
+                            )
+                            embeddings.append(generated_embedding)
                             logger.info(
                                 f"Successfully used minimal fallback for {new_issues[i].issue_key}"
                             )

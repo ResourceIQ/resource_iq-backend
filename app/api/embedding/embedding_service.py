@@ -16,7 +16,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-def is_retryable_error(exception: Exception) -> bool:
+def is_retryable_error(exception: BaseException) -> bool:
     """Check if the exception corresponds to a retryable error (Connection, 429, 5xx)."""
     if isinstance(exception, requests.exceptions.HTTPError):
         status_code = exception.response.status_code if exception.response else 0
@@ -215,10 +215,9 @@ class VectorEmbeddingService:
 
         try:
             # Query existing PR IDs efficiently
+            pr_id_column = cast(Any, GitHubPRVector.pr_id)
             existing_records = (
-                self.db.query(GitHubPRVector.pr_id)
-                .filter(GitHubPRVector.pr_id.in_(pr_ids))
-                .all()
+                self.db.query(pr_id_column).filter(pr_id_column.in_(pr_ids)).all()
             )
             existing_pr_ids = {r[0] for r in existing_records}
         except Exception as e:
