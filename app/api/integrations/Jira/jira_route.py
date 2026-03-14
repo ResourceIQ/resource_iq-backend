@@ -9,7 +9,11 @@ from fastapi.responses import RedirectResponse
 
 from app.api.integrations.Jira.jira_model import JiraOAuthToken
 from app.api.integrations.Jira.jira_schema import (
+    JiraAssignIssueRequest,
+    JiraAssignIssueResponse,
     JiraAuthConnectResponse,
+    JiraCreateIssueRequest,
+    JiraCreateIssueResponse,
     JiraIssueTypeStatusResponse,
     JiraIssueTypeStatusUpdateRequest,
     JiraSyncRequest,
@@ -199,6 +203,56 @@ async def get_projects(session: SessionDep) -> list[dict[str, Any]]:
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch projects: {str(e)}"
         )
+
+
+@router.get("/issue-types")
+async def get_issue_types(session: SessionDep) -> list[dict[str, Any]]:
+    """Get all available Jira issue types (excludes subtasks)."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.fetch_issue_types()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch issue types: {str(e)}"
+        )
+
+
+@router.post("/issues", response_model=JiraCreateIssueResponse)
+async def create_issue(
+    session: SessionDep,
+    request: JiraCreateIssueRequest,
+) -> JiraCreateIssueResponse:
+    """Create a Jira issue with optional assignee.
+
+    When ``assignee_user_id`` is provided the corresponding
+    ``jira_account_id`` is resolved from the resource profile and the
+    issue is assigned automatically.
+    """
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.create_issue(request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create issue: {str(e)}")
+
+
+@router.put("/issues/{issue_key}/assignee", response_model=JiraAssignIssueResponse)
+async def assign_issue(
+    session: SessionDep,
+    issue_key: str,
+    request: JiraAssignIssueRequest,
+) -> JiraAssignIssueResponse:
+    """Assign or reassign a Jira issue to a ResourceIQ user."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.assign_issue(issue_key, request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to assign issue: {str(e)}")
 
 
 @router.post("/sync", response_model=JiraSyncResponse)
