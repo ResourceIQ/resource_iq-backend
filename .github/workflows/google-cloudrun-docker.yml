@@ -72,11 +72,10 @@ jobs:
         env:
           DOCKER_IMAGE_BACKEND: "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app"
           TAG: "${{ github.sha }}"
-          DOMAIN: ${{ secrets.DOMAIN }}
+          DOMAIN: ${{ vars.DOMAIN }}
           ENVIRONMENT: "production"
           PROJECT_NAME: "ResourceIQ"
           CLOUD_SQL_CONNECTION_NAME: "${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq"
-          POSTGRES_SERVER: "localhost"
           POSTGRES_PORT: "5432"
           POSTGRES_DB: "resource-iq"
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
@@ -95,19 +94,19 @@ jobs:
           SMTP_SSL: ${{ secrets.SMTP_SSL }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          GITHUB_APP_ID: ${{ secrets.GITHUB_APP_ID }}
-          GITHUB_PRIVATE_KEY: ${{ secrets.GITHUB_PRIVATE_KEY }}
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          GITHUB_APP_SLUG: ${{ secrets.GITHUB_APP_SLUG }}
+          GITHUB_APP_ID: ${{ secrets.GH_APP_ID }}
+          GITHUB_PRIVATE_KEY: ${{ secrets.GH_PRIVATE_KEY }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
+          GITHUB_APP_SLUG: ${{ vars.GH_SLUG }}
           JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
           JINA_API_URL: ${{ vars.JINA_API_URL }}
           JINA_EMBEDDING_MODEL1: ${{ vars.JINA_EMBEDDING_MODEL1 }}
           JINA_EMBEDDING_MODEL2: ${{ vars.JINA_EMBEDDING_MODEL2 }}
           USE_JINA_API: ${{ vars.USE_JINA_API }}
-          EMBEDDING_DIMENSION: ${{ secrets.EMBEDDING_DIMENSION }}
-          ATLASSIAN_CLIENT_ID: ${{ secrets.ATLASSIAN_CLIENT_ID }}
+          EMBEDDING_DIMENSION: ${{ vars.EMBEDDING_DIMENSION }}
+          ATLASSIAN_CLIENT_ID: ${{ vars.ATLASSIAN_CLIENT_ID }}
           ATLASSIAN_CLIENT_SECRET: ${{ secrets.ATLASSIAN_CLIENT_SECRET }}
-          ATLASSIAN_REDIRECT_URI: ${{ secrets.ATLASSIAN_REDIRECT_URI }}
+          ATLASSIAN_REDIRECT_URI: ${{ vars.ATLASSIAN_REDIRECT_URI }}
           NEO4J_SCHEME: ${{ secrets.NEO4J_SCHEME }}
           NEO4J_HOST: ${{ secrets.NEO4J_HOST }}
           NEO4J_PORT: ${{ secrets.NEO4J_PORT }}
