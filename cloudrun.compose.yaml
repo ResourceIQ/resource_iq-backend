@@ -1,10 +1,13 @@
+name: resource-iq-be
+
 services:
-  resource_iq:
+  resource-iq:
     image: "${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}"
+    ports:
+      - "8080"
     depends_on:
       - redis
     environment:
-      - PORT=8000
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST}
       - ENVIRONMENT=${ENVIRONMENT}
@@ -60,6 +63,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    ports:
+      - "6379:6379"
     command:
       - redis-server
       - --save
