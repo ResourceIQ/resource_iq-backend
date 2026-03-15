@@ -93,9 +93,13 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
 
     # ---- 1. Team Members ----
     total_members = session.exec(select(func.count()).select_from(User)).one()
-    
-    developers = session.exec(select(func.count()).select_from(User).where(col(User.role) == "USER")).one()
-    admins = session.exec(select(func.count()).select_from(User).where(col(User.role) == "ADMIN")).one()
+
+    developers = session.exec(
+        select(func.count()).select_from(User).where(col(User.role) == "USER")
+    ).one()
+    admins = session.exec(
+        select(func.count()).select_from(User).where(col(User.role) == "ADMIN")
+    ).one()
 
     month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0)
     new_this_month = session.exec(
@@ -151,7 +155,10 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
 
     return DashboardResponse(
         team_members=TeamMembersCard(
-            total=total_members, new_this_month=new_this_month,developers=developers,admins=admins
+            total=total_members,
+            new_this_month=new_this_month,
+            developers=developers,
+            admins=admins,
         ),
         team_utilization=TeamUtilizationCard(
             percentage=utilization_pct, message=util_msg
