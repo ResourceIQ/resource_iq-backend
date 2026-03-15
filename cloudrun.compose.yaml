@@ -5,7 +5,6 @@ services:
     depends_on:
       - redis
     environment:
-      - PORT=8000
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST}
       - ENVIRONMENT=${ENVIRONMENT}
