@@ -224,6 +224,7 @@ class VectorEmbeddingService:
             logger.warning(
                 f"Failed to check existing PRs, proceeding with full list: {e}"
             )
+            self.db.rollback()
 
         # Keep only new PRs
         new_pr_contents = [
@@ -296,35 +297,41 @@ class VectorEmbeddingService:
                 continue
 
             try:
-                # We already know these are new, so just create
-                db_pr_vector = GitHubPRVector(
-                    pr_id=str(pr.id),
-                    pr_number=pr.number,
-                    author_login=pr.author.login,
-                    author_id=pr.author.id,
-                    repo_id=pr.repo_id,
-                    repo_name=pr.repo_name or "",
-                    pr_title=pr.title,
-                    pr_url=str(pr.html_url),
-                    pr_description=pr.body or "",
-                    embedding=embedding,
-                    context=pr.context or "",
-                    metadata_json={
-                        "changed_files": pr.changed_files or [],
-                        "labels": pr.labels or [],
-                    },
-                )
-                self.db.add(db_pr_vector)
+                with self.db.begin_nested():
+                    db_pr_vector = GitHubPRVector(
+                        pr_id=str(pr.id),
+                        pr_number=pr.number,
+                        author_login=pr.author.login,
+                        author_id=pr.author.id,
+                        repo_id=pr.repo_id,
+                        repo_name=pr.repo_name or "",
+                        pr_title=pr.title,
+                        pr_url=str(pr.html_url),
+                        pr_description=pr.body or "",
+                        embedding=embedding,
+                        context=pr.context or "",
+                        metadata_json={
+                            "changed_files": pr.changed_files or [],
+                            "labels": pr.labels or [],
+                        },
+                    )
+                    self.db.add(db_pr_vector)
+                    self.db.flush()
                 logger.debug(f"Created PR {pr.number}")
 
                 success_count += 1
 
             except Exception as e:
                 logger.error(f"Error storing PR {pr.number}: {str(e)}")
-                self.db.rollback()
                 continue
 
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception as e:
+            logger.error(f"Error committing PR vectors for {author.login}: {str(e)}")
+            self.db.rollback()
+            raise
+
         logger.info(f"Stored {success_count} new PR vectors for {author.login}")
         # Return total processed (skipped + newly stored) so the caller gets accurate "synced" count
         return success_count + skipped_count
