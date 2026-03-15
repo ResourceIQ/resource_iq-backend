@@ -1,5 +1,5 @@
 services:
-  resource_iq:
+  resource-iq:
     image: "${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}"
     depends_on:
       - redis
