@@ -69,7 +69,6 @@ jobs:
           docker push "$IMAGE_BASE:latest"
 
       - name: 'Deploy Multi-Container Cloud Run Service'
-        # We move all variables here. Gcloud will inject these into compose.yaml
         env:
           DOCKER_IMAGE_BACKEND: "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app"
           TAG: "${{ github.sha }}"
@@ -120,10 +119,10 @@ jobs:
           REDIS_DB: "0"
           TASK_STATUS_TTL_SECONDS: "86400"
         run: |-
-          gcloud beta run compose up compose.yaml \
+          gcloud beta run compose up \
+            --file compose.yaml \
             --project "${{ env.PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
-            --service "${{ env.SERVICE }}" \
             --quiet
 
       - name: 'Create or Update Migration Job'
