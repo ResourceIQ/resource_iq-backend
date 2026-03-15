@@ -51,6 +51,11 @@ jobs:
           service_account: '${{ secrets.GCP_SERVICE_ACCOUNT }}'
           token_format: 'access_token'
 
+      - name: 'Setup gcloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
+        with:
+          project_id: '${{ env.PROJECT_ID }}'
+
       - name: 'Docker Auth'
         run: |-
           gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
@@ -64,20 +69,65 @@ jobs:
           docker push "$IMAGE_BASE:${{ github.sha }}"
           docker push "$IMAGE_BASE:latest"
 
-      - name: 'Deploy to Cloud Run'
-        id: 'deploy'
-        uses: 'google-github-actions/deploy-cloudrun@v3'
-        with:
-          service: '${{ env.SERVICE }}'
-          region: '${{ env.REGION }}'
-          image: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app:${{ github.sha }}'
-          flags: >-
-            --allow-unauthenticated
-            --cpu=2
-            --memory=8Gi
-            --min-instances=0
-            --max-instances=10
-            --concurrency=80
+      - name: 'Deploy Multi-Container Cloud Run Service'
+        run: |-
+          IMAGE_BASE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app"
+          ENV_VARS=(
+            "DOCKER_IMAGE_BACKEND=$IMAGE_BASE"
+            "TAG=${{ github.sha }}"
+            "DOMAIN=${{ secrets.DOMAIN }}"
+            "ENVIRONMENT=production"
+            "PROJECT_NAME=ResourceIQ"
+            "CLOUD_SQL_CONNECTION_NAME=${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq"
+            "POSTGRES_SERVER=localhost"
+            "POSTGRES_PORT=5432"
+            "POSTGRES_DB=resource-iq"
+            "POSTGRES_USER=${{ secrets.POSTGRES_USER }}"
+            "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}"
+            "POSTGRES_SSL_MODE=disable"
+            "SECRET_KEY=${{ secrets.SECRET_KEY }}"
+            "FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }}"
+            "FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }}"
+            "FRONTEND_HOST=${{ secrets.FRONTEND_HOST }}"
+            "BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}"
+            "SMTP_HOST=${{ secrets.SMTP_HOST }}"
+            "SMTP_USER=${{ secrets.SMTP_USER }}"
+            "SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}"
+            "EMAILS_FROM_EMAIL=${{ secrets.EMAILS_FROM_EMAIL }}"
+            "SMTP_TLS=${{ secrets.SMTP_TLS }}"
+            "SMTP_SSL=${{ secrets.SMTP_SSL }}"
+            "SMTP_PORT=${{ secrets.SMTP_PORT }}"
+            "SENTRY_DSN=${{ secrets.SENTRY_DSN }}"
+            "GITHUB_APP_ID=${{ secrets.GITHUB_APP_ID }}"
+            "GITHUB_PRIVATE_KEY=${{ secrets.GITHUB_PRIVATE_KEY }}"
+            "GITHUB_WEBHOOK_SECRET=${{ secrets.GITHUB_WEBHOOK_SECRET }}"
+            "GITHUB_APP_SLUG=${{ secrets.GITHUB_APP_SLUG }}"
+            "JINA_API_KEY=${{ secrets.JINA_API_KEY }}"
+            "JINA_API_URL=${{ secrets.JINA_API_URL }}"
+            "JINA_EMBEDDING_MODEL1=${{ secrets.JINA_EMBEDDING_MODEL1 }}"
+            "JINA_EMBEDDING_MODEL2=${{ secrets.JINA_EMBEDDING_MODEL2 }}"
+            "USE_JINA_API=${{ secrets.USE_JINA_API }}"
+            "EMBEDDING_DIMENSION=${{ secrets.EMBEDDING_DIMENSION }}"
+            "ATLASSIAN_CLIENT_ID=${{ secrets.ATLASSIAN_CLIENT_ID }}"
+            "ATLASSIAN_CLIENT_SECRET=${{ secrets.ATLASSIAN_CLIENT_SECRET }}"
+            "ATLASSIAN_REDIRECT_URI=${{ secrets.ATLASSIAN_REDIRECT_URI }}"
+            "NEO4J_SCHEME=${{ secrets.NEO4J_SCHEME }}"
+            "NEO4J_HOST=${{ secrets.NEO4J_HOST }}"
+            "NEO4J_PORT=${{ secrets.NEO4J_PORT }}"
+            "NEO4J_USER=${{ secrets.NEO4J_USER }}"
+            "NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }}"
+            "NEO4J_DATABASE=${{ secrets.NEO4J_DATABASE }}"
+            "AURA_INSTANCEID=${{ secrets.AURA_INSTANCEID }}"
+            "AURA_INSTANCENAME=${{ secrets.AURA_INSTANCENAME }}"
+            "REDIS_DB=0"
+            "TASK_STATUS_TTL_SECONDS=86400"
+          )
+          SET_ENV_VARS=$(IFS=, ; echo "${ENV_VARS[*]}")
+
+          gcloud beta run compose up cloudrun.compose.yaml \
+            --project "${{ env.PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --set-env-vars "$SET_ENV_VARS"
 
       - name: 'Create or Update Migration Job'
         run: |-
@@ -94,6 +144,3 @@ jobs:
           gcloud run jobs execute resource-iq-prestart \
             --region ${{ env.REGION }} \
             --wait
-
-      - name: 'Show output'
-        run: echo ${{ steps.deploy.outputs.url }}

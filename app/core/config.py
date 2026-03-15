@@ -189,6 +189,12 @@ class Settings(BaseSettings):
     USE_JINA_API: bool = False
     EMBEDDING_DIMENSION: int = 1536  # Must match database Vector(dim=1536)
 
+    # Redis sidecar for long-running task status + logs
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    TASK_STATUS_TTL_SECONDS: int = 86400
+
     @model_validator(mode="after")
     def _validate_jina_settings(self) -> Self:
         if self.USE_JINA_API and not self.JINA_API_KEY:

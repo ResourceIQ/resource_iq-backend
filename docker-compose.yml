@@ -55,10 +55,12 @@ services:
     image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
     container_name: resource_iq
     ports:
-      - "8000:8000"
+      - "8000:8080"
     depends_on:
       prestart:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
     networks:
       - db_network
     env_file:
@@ -104,6 +106,10 @@ services:
       - NEO4J_DATABASE=${NEO4J_DATABASE}
       - AURA_INSTANCEID=${AURA_INSTANCEID}
       - AURA_INSTANCENAME=${AURA_INSTANCENAME}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - TASK_STATUS_TTL_SECONDS=86400
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/"]
       interval: 10s
@@ -119,6 +125,19 @@ services:
         - action: sync
           path: ./app
           target: /app/app
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - db_network
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --port
+      - "6379"
 
 networks:
   db_network:
