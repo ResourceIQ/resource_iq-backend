@@ -119,6 +119,8 @@ jobs:
           REDIS_DB: "0"
           TASK_STATUS_TTL_SECONDS: "86400"
         run: |-
+          touch .env
+
           gcloud beta run compose up \
             --project "${{ env.PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
