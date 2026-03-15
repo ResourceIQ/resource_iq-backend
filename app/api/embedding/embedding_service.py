@@ -59,15 +59,30 @@ class VectorEmbeddingService:
                     "Install sentence-transformers for local embeddings: pip install sentence-transformers"
                 )
 
-    def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
+    def generate_embeddings(
+        self, texts: list[str], prompt_name: str | None = None
+    ) -> list[list[float]]:
         """Generate embeddings using Jina (API or local)."""
         if self.use_api:
-            raw_embeddings = self._generate_embeddings_api(texts)
+            raw_embeddings = self._generate_embeddings_api(texts, prompt_name)
         else:
-            raw_embeddings = self._generate_embeddings_local(texts)
+            raw_embeddings = self._generate_embeddings_local(texts, prompt_name)
 
         # Normalize shape early so downstream callers can assume consistent dimensions
         return [self._normalize_embedding_dimension(emb) for emb in raw_embeddings]
+
+    @staticmethod
+    def _prompt_name_to_task(prompt_name: str | None) -> str | None:
+        """Map local prompt_name style (e.g. nl2code_query) to API task (e.g. nl2code.query)."""
+        if not prompt_name:
+            return None
+        if prompt_name.endswith("_query"):
+            return f"{prompt_name[:-6]}.query"
+        if prompt_name.endswith("_document"):
+            return f"{prompt_name[:-9]}.passage"
+        if "." in prompt_name:
+            return prompt_name
+        return None
 
     def _clean_text_for_embedding(self, text: str) -> str:
         """Clean text to remove problematic characters for Jina API."""
@@ -99,7 +114,9 @@ class VectorEmbeddingService:
 
         return text.strip() or "Empty content after cleaning"
 
-    def _generate_embeddings_api(self, texts: list[str]) -> list[list[float]]:
+    def _generate_embeddings_api(
+        self, texts: list[str], prompt_name: str | None = None
+    ) -> list[list[float]]:
         """Generate embeddings using Jina API with batching and rate limiting."""
         # Constants for rate limiting
         batch_size = 30  # Conservative batch size
@@ -127,7 +144,9 @@ class VectorEmbeddingService:
             start_time = time.time()
 
             try:
-                batch_embeddings = self._call_jina_api_with_retry(cleaned_batch)
+                batch_embeddings = self._call_jina_api_with_retry(
+                    cleaned_batch, prompt_name
+                )
                 all_embeddings.extend(batch_embeddings)
             except Exception as e:
                 logger.error(
@@ -157,14 +176,19 @@ class VectorEmbeddingService:
         wait=wait_exponential(multiplier=1, min=2, max=20),
         retry=retry_if_exception(is_retryable_error),
     )
-    def _call_jina_api_with_retry(self, texts: list[str]) -> list[list[float]]:
+    def _call_jina_api_with_retry(
+        self, texts: list[str], prompt_name: str | None = None
+    ) -> list[list[float]]:
         """Helper to call Jina API with retry logic."""
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
 
-        payload = {"model": self.embedding_model, "input": texts}
+        payload: dict[str, Any] = {"model": self.embedding_model, "input": texts}
+        task = self._prompt_name_to_task(prompt_name)
+        if task:
+            payload["task"] = task
 
         logger.info(
             f"Calling Jina API with model: {self.embedding_model}, Batch size: {len(texts)}"
@@ -173,6 +197,21 @@ class VectorEmbeddingService:
         response = requests.post(
             self.api_url, json=payload, headers=headers, timeout=60
         )
+
+        # Some API/model combinations may not support task routing; retry once without task.
+        if (
+            task
+            and response.status_code == 400
+            and (
+                "task" in response.text.lower()
+                or "invalid task" in response.text.lower()
+            )
+        ):
+            logger.warning(f"Jina API rejected task='{task}', retrying without task")
+            payload.pop("task", None)
+            response = requests.post(
+                self.api_url, json=payload, headers=headers, timeout=60
+            )
 
         if not response.ok:
             logger.error(f"Jina API Error: {response.status_code} - {response.text}")
@@ -191,10 +230,25 @@ class VectorEmbeddingService:
 
         return embeddings
 
-    def _generate_embeddings_local(self, texts: list[str]) -> list[list[float]]:
+    def _generate_embeddings_local(
+        self, texts: list[str], prompt_name: str | None = None
+    ) -> list[list[float]]:
         """Generate embeddings using local Jina model."""
         try:
-            embeddings = self.model.encode(texts, show_progress_bar=True)
+            if prompt_name:
+                try:
+                    embeddings = self.model.encode(
+                        texts,
+                        show_progress_bar=True,
+                        prompt_name=prompt_name,
+                    )
+                except TypeError:
+                    logger.warning(
+                        f"Local model encode does not support prompt_name='{prompt_name}', falling back to default encode"
+                    )
+                    embeddings = self.model.encode(texts, show_progress_bar=True)
+            else:
+                embeddings = self.model.encode(texts, show_progress_bar=True)
             logger.info(f"Generated {len(embeddings)} embeddings locally")
             return cast(list[list[float]], embeddings.tolist())
         except Exception as e:
@@ -245,7 +299,10 @@ class VectorEmbeddingService:
 
         # Generate embeddings with fallback to local model if API fails
         try:
-            valid_embeddings = self.generate_embeddings(pr_contexts)
+            valid_embeddings = self.generate_embeddings(
+                pr_contexts,
+                prompt_name=settings.GITHUB_DOCUMENT_PROMPT_NAME,
+            )
             embeddings = cast(list[list[float] | None], valid_embeddings)
         except Exception as e:
             logger.warning(
@@ -254,7 +311,10 @@ class VectorEmbeddingService:
             embeddings = []
             for i, doc in enumerate(pr_contexts):
                 try:
-                    single_embedding = self.generate_embeddings([doc])[0]
+                    single_embedding = self.generate_embeddings(
+                        [doc],
+                        prompt_name=settings.GITHUB_DOCUMENT_PROMPT_NAME,
+                    )[0]
                     embeddings.append(single_embedding)
                 except Exception:
                     logger.warning(
@@ -263,7 +323,10 @@ class VectorEmbeddingService:
                     try:
                         # Try very aggressive truncation as last resort (1000 chars)
                         short_doc = doc[:1000] + "... [truncated]"
-                        single_embedding = self.generate_embeddings([short_doc])[0]
+                        single_embedding = self.generate_embeddings(
+                            [short_doc],
+                            prompt_name=settings.GITHUB_DOCUMENT_PROMPT_NAME,
+                        )[0]
                         embeddings.append(single_embedding)
                         logger.info(
                             f"Successfully embedded truncated version of PR {new_pr_contents[i].number}"
@@ -276,9 +339,10 @@ class VectorEmbeddingService:
                             )
                             minimal_doc = f"PR: {new_pr_contents[i].title}"
                             minimal_doc = self._clean_text_for_embedding(minimal_doc)
-                            single_embedding = self.generate_embeddings([minimal_doc])[
-                                0
-                            ]
+                            single_embedding = self.generate_embeddings(
+                                [minimal_doc],
+                                prompt_name=settings.GITHUB_DOCUMENT_PROMPT_NAME,
+                            )[0]
                             embeddings.append(single_embedding)
                             logger.info(
                                 f"Successfully used minimal fallback for PR {new_pr_contents[i].number}"

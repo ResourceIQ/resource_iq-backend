@@ -1043,7 +1043,10 @@ class JiraIntegrationService:
         # --- Phase 2: generate embeddings (pure compute, no DB) ---------------
         embeddings: list[list[float] | None] = []
         try:
-            raw = self.vector_service.generate_embeddings(contexts)
+            raw = self.vector_service.generate_embeddings(
+                contexts,
+                prompt_name=settings.JIRA_DOCUMENT_PROMPT_NAME,
+            )
             embeddings = cast(list[list[float] | None], raw)
         except Exception as e:
             logger.warning(f"Batch embedding failed, processing individually: {str(e)}")
@@ -1051,7 +1054,8 @@ class JiraIntegrationService:
             for i, context in enumerate(contexts):
                 try:
                     generated_embedding = self.vector_service.generate_embeddings(
-                        [context]
+                        [context],
+                        prompt_name=settings.JIRA_DOCUMENT_PROMPT_NAME,
                     )[0]
                     embeddings.append(generated_embedding)
                 except Exception:
@@ -1061,7 +1065,8 @@ class JiraIntegrationService:
                     try:
                         short_context = context[:1000] + "... [truncated]"
                         generated_embedding = self.vector_service.generate_embeddings(
-                            [short_context]
+                            [short_context],
+                            prompt_name=settings.JIRA_DOCUMENT_PROMPT_NAME,
                         )[0]
                         embeddings.append(generated_embedding)
                         logger.info(
@@ -1075,7 +1080,10 @@ class JiraIntegrationService:
                                 minimal
                             )
                             generated_embedding = (
-                                self.vector_service.generate_embeddings([minimal])[0]
+                                self.vector_service.generate_embeddings(
+                                    [minimal],
+                                    prompt_name=settings.JIRA_DOCUMENT_PROMPT_NAME,
+                                )[0]
                             )
                             embeddings.append(generated_embedding)
                             logger.info(

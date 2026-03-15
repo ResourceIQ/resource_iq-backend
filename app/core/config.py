@@ -188,6 +188,12 @@ class Settings(BaseSettings):
     JINA_EMBEDDING_MODEL2: str = "jinaai/jina-code-embeddings-0.5b"  # Local model
     USE_JINA_API: bool = False
     EMBEDDING_DIMENSION: int = 1536  # Must match database Vector(dim=1536)
+    # Asymmetric embedding prompt names (Jina task prefixes)
+    GITHUB_QUERY_PROMPT_NAME: str = "nl2code_query"
+    GITHUB_DOCUMENT_PROMPT_NAME: str = "nl2code_document"
+    # Jira issue text is natural-language heavy, so use retrieval-style prompts.
+    JIRA_QUERY_PROMPT_NAME: str = "retrieval_query"
+    JIRA_DOCUMENT_PROMPT_NAME: str = "retrieval_document"
 
     # Redis sidecar for long-running task status + logs
     REDIS_HOST: str = "localhost"

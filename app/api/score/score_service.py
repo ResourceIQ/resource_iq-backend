@@ -11,13 +11,51 @@ from app.api.embedding.embedding_service import VectorEmbeddingService
 from app.api.profiles.profile_model import ResourceProfile
 from app.api.score.score_schema import BestFitInput, PrScoreInfo, ScoreProfile
 from app.api.user.user_model import User
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class ScoreService:
+    # Ignore weak cosine matches that tend to be semantically noisy.
+    MIN_RELEVANT_SIMILARITY = 0.28
+    # We only need a small, strong set of PRs to estimate fit quality.
+    MAX_SCORING_PRS = 8
+    # Confidence saturates after this many relevant PRs.
+    RELEVANT_PR_TARGET = 3
+    # Confidence saturates after this many total PRs.
+    HISTORY_PR_TARGET = 10
+
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    @classmethod
+    def _aggregate_similarity_score(cls, similarities: list[float]) -> float:
+        """Aggregate PR similarities into a final score with confidence weighting."""
+        if not similarities:
+            return 0.0
+
+        sorted_similarities = sorted(similarities, reverse=True)
+        relevant_similarities = [
+            sim for sim in sorted_similarities if sim >= cls.MIN_RELEVANT_SIMILARITY
+        ]
+
+        # If none of a developer's PRs are relevant enough, exclude them from ranking.
+        if not relevant_similarities:
+            return 0.0
+
+        top_relevant = relevant_similarities[: cls.MAX_SCORING_PRS]
+        weights = [1.0 / (idx + 1) for idx, _ in enumerate(top_relevant)]
+        weighted_similarity = sum(
+            sim * weight for sim, weight in zip(top_relevant, weights, strict=False)
+        ) / sum(weights)
+
+        # Penalize sparse history so one accidental match is not over-ranked.
+        relevance_confidence = min(1.0, len(top_relevant) / cls.RELEVANT_PR_TARGET)
+        history_confidence = min(1.0, len(sorted_similarities) / cls.HISTORY_PR_TARGET)
+        confidence = float((relevance_confidence * history_confidence) ** 0.5)
+
+        return float(weighted_similarity) * confidence * 1000.0
 
     def _calculate_developer_github_score(
         self, github_id: int, task_embedding: list[float], threshold: int
@@ -39,7 +77,7 @@ class ScoreService:
             return 0.0, []
 
         task_tensor = torch.tensor(task_embedding, dtype=torch.float)
-        similarities = []
+        similarities: list[float] = []
         pr_matches: list[PrScoreInfo] = []
         for pr in prs:
             if pr.embedding is None:
@@ -47,7 +85,8 @@ class ScoreService:
             pr_tensor = torch.tensor(pr.embedding, dtype=torch.float)
             # Use dim=0 since vectors are 1-D
             sim = cosine_similarity(task_tensor, pr_tensor, dim=0)
-            similarities.append(sim)
+            sim_value = float(sim.item())
+            similarities.append(sim_value)
 
             pr_matches.append(
                 PrScoreInfo(
@@ -55,13 +94,13 @@ class ScoreService:
                     pr_title=pr.pr_title,
                     pr_url=pr.pr_url,
                     pr_description=pr.pr_description,
-                    match_percentage=sim * 100.0,
+                    match_percentage=sim_value * 100.0,
                 )
             )
 
         if not similarities:
             return 0.0, []
-        final_score = float(torch.stack(similarities).mean().item() * 1000)
+        final_score = self._aggregate_similarity_score(similarities)
         pr_matches.sort(key=lambda x: x.match_percentage, reverse=True)
 
         return final_score, pr_matches[:3]
@@ -81,7 +120,10 @@ class ScoreService:
 
         # Generate task embedding
         embedding_service = VectorEmbeddingService(self.db)
-        task_embedding = embedding_service.generate_embeddings([task])[0]
+        task_embedding = embedding_service.generate_embeddings(
+            [task],
+            prompt_name=settings.GITHUB_QUERY_PROMPT_NAME,
+        )[0]
 
         # Calculate scores for each profile
         scores: list[ScoreProfile] = []
