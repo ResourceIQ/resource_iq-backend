@@ -55,6 +55,7 @@ jobs:
         uses: 'google-github-actions/setup-gcloud@v3'
         with:
           project_id: '${{ env.PROJECT_ID }}'
+          install_components: 'beta'
 
       - name: 'Docker Auth'
         run: |-
@@ -128,6 +129,7 @@ jobs:
             --project "${{ env.PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
             --set-env-vars "$SET_ENV_VARS"
+            --quiet
 
       - name: 'Create or Update Migration Job'
         run: |-
