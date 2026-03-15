@@ -120,7 +120,6 @@ jobs:
           TASK_STATUS_TTL_SECONDS: "86400"
         run: |-
           gcloud beta run compose up \
-            --file compose.yaml \
             --project "${{ env.PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
             --quiet
