@@ -1,0 +1,143 @@
+name: 'Build and Deploy to Cloud Run'
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: 'asia-south1'
+  SERVICE: "resource-iq-be"
+  WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WIF_PROVIDER }}
+
+jobs:
+  build-test:
+    name: 'Build and Verify'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'actions/checkout@v6'
+
+      - name: 'Test Docker Build'
+        run: docker build . -t test-build
+
+      - name: 'Check for Migration Branches'
+        run: |
+          docker run --entrypoint /bin/bash test-build -c "alembic heads | wc -l | grep -q '^1$'" || \
+          (echo "ERROR: Multiple Alembic heads detected! You must merge your migration branches." && \
+           docker run --entrypoint /bin/bash test-build -c "alembic heads" && exit 1)
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build-test
+    runs-on: 'ubuntu-latest'
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@v6'
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          workload_identity_provider: '${{ env.WORKLOAD_IDENTITY_PROVIDER }}'
+          service_account: '${{ secrets.GCP_SERVICE_ACCOUNT }}'
+          token_format: 'access_token'
+
+      - name: 'Setup gcloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
+        with:
+          project_id: '${{ env.PROJECT_ID }}'
+          install_components: 'beta'
+
+      - name: 'Docker Auth'
+        run: |-
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: 'Build and Push Container'
+        run: |-
+          IMAGE_BASE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app"
+          docker build -t "$IMAGE_BASE:${{ github.sha }}" -t "$IMAGE_BASE:latest" .
+          docker push "$IMAGE_BASE:${{ github.sha }}"
+          docker push "$IMAGE_BASE:latest"
+
+      - name: 'Deploy Multi-Container Cloud Run Service'
+        env:
+          DOCKER_IMAGE_BACKEND: "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app"
+          TAG: "${{ github.sha }}"
+          DOMAIN: ${{ secrets.DOMAIN }}
+          ENVIRONMENT: "production"
+          PROJECT_NAME: "ResourceIQ"
+          CLOUD_SQL_CONNECTION_NAME: "${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq"
+          POSTGRES_SERVER: "localhost"
+          POSTGRES_PORT: "5432"
+          POSTGRES_DB: "resource-iq"
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_SSL_MODE: "disable"
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          FIRST_SUPERUSER: ${{ secrets.FIRST_SUPERUSER }}
+          FIRST_SUPERUSER_PASSWORD: ${{ secrets.FIRST_SUPERUSER_PASSWORD }}
+          FRONTEND_HOST: ${{ secrets.FRONTEND_HOST }}
+          BACKEND_CORS_ORIGINS: ${{ secrets.BACKEND_CORS_ORIGINS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAILS_FROM_EMAIL: ${{ secrets.EMAILS_FROM_EMAIL }}
+          SMTP_TLS: ${{ secrets.SMTP_TLS }}
+          SMTP_SSL: ${{ secrets.SMTP_SSL }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          GITHUB_APP_ID: ${{ secrets.GITHUB_APP_ID }}
+          GITHUB_PRIVATE_KEY: ${{ secrets.GITHUB_PRIVATE_KEY }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+          GITHUB_APP_SLUG: ${{ secrets.GITHUB_APP_SLUG }}
+          JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+          JINA_API_URL: ${{ secrets.JINA_API_URL }}
+          JINA_EMBEDDING_MODEL1: ${{ secrets.JINA_EMBEDDING_MODEL1 }}
+          JINA_EMBEDDING_MODEL2: ${{ secrets.JINA_EMBEDDING_MODEL2 }}
+          USE_JINA_API: ${{ secrets.USE_JINA_API }}
+          EMBEDDING_DIMENSION: ${{ secrets.EMBEDDING_DIMENSION }}
+          ATLASSIAN_CLIENT_ID: ${{ secrets.ATLASSIAN_CLIENT_ID }}
+          ATLASSIAN_CLIENT_SECRET: ${{ secrets.ATLASSIAN_CLIENT_SECRET }}
+          ATLASSIAN_REDIRECT_URI: ${{ secrets.ATLASSIAN_REDIRECT_URI }}
+          NEO4J_SCHEME: ${{ secrets.NEO4J_SCHEME }}
+          NEO4J_HOST: ${{ secrets.NEO4J_HOST }}
+          NEO4J_PORT: ${{ secrets.NEO4J_PORT }}
+          NEO4J_USER: ${{ secrets.NEO4J_USER }}
+          NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+          NEO4J_DATABASE: ${{ secrets.NEO4J_DATABASE }}
+          AURA_INSTANCEID: ${{ secrets.AURA_INSTANCEID }}
+          AURA_INSTANCENAME: ${{ secrets.AURA_INSTANCENAME }}
+          REDIS_DB: "0"
+          TASK_STATUS_TTL_SECONDS: "86400"
+        run: |-
+          touch .env
+
+          gcloud beta run compose up \
+            --project "${{ env.PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --quiet
+
+      - name: 'Create or Update Migration Job'
+        run: |-
+          gcloud run jobs deploy resource-iq-prestart \
+            --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/app:latest \
+            --command "/bin/bash" \
+            --args "scripts/prestart.sh" \
+            --region ${{ env.REGION }} \
+            --set-cloudsql-instances ${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq \
+            --set-env-vars "PROJECT_NAME=ResourceIQ,FIRST_SUPERUSER=${{ secrets.FIRST_SUPERUSER }},FIRST_SUPERUSER_PASSWORD=${{ secrets.FIRST_SUPERUSER_PASSWORD }},CLOUD_SQL_CONNECTION_NAME=${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq"
+
+      - name: 'Run Migrations'
+        run: |-
+          gcloud run jobs execute resource-iq-prestart \
+            --region ${{ env.REGION }} \
+            --wait

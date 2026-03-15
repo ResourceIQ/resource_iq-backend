@@ -29,6 +29,12 @@ logger = logging.getLogger(__name__)
 
 def _generate_app_jwt() -> str:
     """Generate a short-lived JWT signed with the GitHub App private key."""
+    if not settings.GITHUB_APP_ID or not settings.GITHUB_PRIVATE_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="Server configuration error: GitHub App ID or Key missing",
+        )
+
     now = int(time_mod.time())
     payload = {
         "iat": now - 60,

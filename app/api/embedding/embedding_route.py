@@ -5,47 +5,15 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.api.embedding.embedding_sync_service import (
+    SyncAllRequest,
+    SyncAllResponse,
+    run_sync_all_vectors,
+)
 from app.api.integrations.GitHub.github_service import GithubIntegrationService
 from app.utils.deps import SessionDep
 
 router = APIRouter(prefix="/vectors", tags=["Vector Embeddings"])
-
-
-class SyncAllRequest(BaseModel):
-    """Request schema for syncing all vectors from GitHub and Jira."""
-
-    # Source selection (all enabled by default)
-    sync_github: bool = Field(default=True, description="Sync GitHub PRs")
-    sync_jira: bool = Field(default=True, description="Sync Jira issues")
-
-    # GitHub options
-    github_max_prs_per_author: int = Field(
-        default=50, ge=1, le=500, description="Max PRs to fetch per GitHub author"
-    )
-
-    # Jira options
-    jira_project_keys: list[str] | None = Field(
-        default=None, description="Specific Jira projects to sync (None = all)"
-    )
-    jira_max_issues: int = Field(
-        default=100, ge=1, le=1000, description="Max Jira issues to fetch per project"
-    )
-    jira_include_closed: bool = Field(
-        default=True, description="Include closed/done Jira issues"
-    )
-    jira_sync_comments: bool = Field(
-        default=True, description="Sync Jira issue comments"
-    )
-
-
-class SyncAllResponse(BaseModel):
-    """Response schema for sync all operation."""
-
-    status: str
-    github: dict[str, Any] | None = None
-    jira: dict[str, Any] | None = None
-    total_embeddings: int
-    errors: list[str] = Field(default_factory=list)
 
 
 @router.post("/sync/author")
@@ -100,69 +68,8 @@ async def sync_all_vectors(
     }
     ```
     """
-    # Use defaults if no request body provided
-    if request is None:
-        request = SyncAllRequest()
-
-    errors: list[str] = []
-    github_result: dict[str, Any] | None = None
-    jira_result: dict[str, Any] | None = None
-    total_embeddings = 0
-
-    # Sync GitHub PRs
-    if request.sync_github:
-        try:
-            github_service = GithubIntegrationService(session)
-            github_result = github_service.sync_all_authors_prs_to_vectors(
-                request.github_max_prs_per_author
-            )
-            total_embeddings += github_result.get("total_prs", 0)
-        except Exception as e:
-            error_msg = f"GitHub sync failed: {str(e)}"
-            errors.append(error_msg)
-
-    # Sync Jira Issues
-    if request.sync_jira:
-        try:
-            from app.api.integrations.Jira.jira_service import JiraIntegrationService
-
-            jira_service = JiraIntegrationService(session)
-            sync_result = jira_service.sync_issues(
-                project_keys=request.jira_project_keys,
-                max_results=request.jira_max_issues,
-                include_closed=request.jira_include_closed,
-                sync_comments=request.jira_sync_comments,
-                generate_embeddings=True,
-            )
-            jira_result = {
-                "status": sync_result.status,
-                "projects_synced": sync_result.projects_synced,
-                "issues_synced": sync_result.issues_synced,
-                "embeddings_generated": sync_result.embeddings_generated,
-                "duration_seconds": sync_result.sync_duration_seconds,
-            }
-            total_embeddings += sync_result.embeddings_generated
-            if sync_result.errors:
-                errors.extend(sync_result.errors)
-        except Exception as e:
-            error_msg = f"Jira sync failed: {str(e)}"
-            errors.append(error_msg)
-
-    # Determine overall status
-    if not errors:
-        status = "completed"
-    elif github_result or jira_result:
-        status = "completed_with_errors"
-    else:
-        status = "failed"
-
-    return SyncAllResponse(
-        status=status,
-        github=github_result,
-        jira=jira_result,
-        total_embeddings=total_embeddings,
-        errors=errors,
-    )
+    request = request or SyncAllRequest()
+    return run_sync_all_vectors(session=session, request=request)
 
 
 class UnifiedSearchRequest(BaseModel):

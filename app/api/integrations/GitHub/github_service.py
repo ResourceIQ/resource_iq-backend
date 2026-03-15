@@ -49,6 +49,11 @@ class GithubIntegrationService:
         if not self.credentials:
             raise Exception("GitHub integration credentials not found in database")
 
+        if not settings.GITHUB_APP_ID or not settings.GITHUB_PRIVATE_KEY:
+            raise Exception(
+                "Server configuration error: GitHub App ID or Private Key missing"
+            )
+
         app_auth = Auth.AppAuth(
             app_id=str(settings.GITHUB_APP_ID),
             private_key=settings.GITHUB_PRIVATE_KEY,
@@ -380,10 +385,67 @@ class GithubIntegrationService:
     def sync_all_authors_prs_to_vectors(
         self, max_prs_per_author: int = 100
     ) -> dict[str, int]:
-        """Fetch PRs for all authors and store their vectors."""
-        authors_prs = self.get_org_closed_prs_context_all_authors(max_prs_per_author)
-        self.vector_service.store_all_authors_pr_contexts(authors_prs)
+        """Fetch PRs for all authors and store their vectors incrementally."""
+        gh = self.get_github_client()
+        org = gh.get_organization(self.organization_name)
+
+        # Track how many PRs we've stored per author to respect the limit
+        # Using ID instead of login for stability
+        author_pr_counts: dict[int, int] = {}
+        total_prs_processed = 0
+        total_authors_touched = set()
+
+        # Iterate repos and process immediately
+        for repo in org.get_repos():
+            try:
+                logger.info(f"Scanning repo: {repo.name}...")
+                repo_prs = repo.get_pulls(
+                    state="closed", sort="updated", direction="desc"
+                )
+
+                # Buffer for current repo to group by author ID
+                current_repo_prs: dict[int, list[PullRequestContent]] = {}
+                repo_has_eligible_prs = False
+
+                for pr in repo_prs:
+                    if not pr.user:
+                        continue
+
+                    author_id = pr.user.id
+
+                    # Check if this author has already reached the global limit
+                    current_count = author_pr_counts.get(author_id, 0)
+                    if current_count >= max_prs_per_author:
+                        continue
+
+                    if author_id not in current_repo_prs:
+                        current_repo_prs[author_id] = []
+
+                    current_repo_prs[author_id].append(self.generate_pr_context(pr))
+
+                    # Update global count immediately
+                    author_pr_counts[author_id] = current_count + 1
+                    total_authors_touched.add(author_id)
+                    repo_has_eligible_prs = True
+
+                # Flush current repo's PRs to vector store
+                if repo_has_eligible_prs:
+                    for author_id, pr_contents in current_repo_prs.items():
+                        if pr_contents:
+                            author = pr_contents[0].author
+                            logger.info(
+                                f"Syncing {len(pr_contents)} PRs for {author.login} (ID: {author_id}) from {repo.name}..."
+                            )
+                            stored_count = self.vector_service.store_pr_contexts(
+                                author, pr_contents
+                            )
+                            total_prs_processed += stored_count
+
+            except Exception as e:
+                logger.warning("Skipping repo %s: %s", repo.name, str(e))
+                continue
+
         return {
-            "total_authors": len(authors_prs),
-            "total_prs": sum(len(prs) for prs in authors_prs.values()),
+            "total_authors": len(total_authors_touched),
+            "total_prs": total_prs_processed,
         }

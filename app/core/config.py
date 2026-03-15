@@ -1,6 +1,6 @@
 import secrets
 import warnings
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from pydantic import (
     AnyUrl,
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str
     SENTRY_DSN: HttpUrl | None = None
-    POSTGRES_SERVER: str
+    POSTGRES_SERVER: str | None = None
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "$enujaImeth123"
@@ -67,9 +67,35 @@ class Settings(BaseSettings):
     NEO4J_PASSWORD: str | None = None
     NEO4J_DATABASE: str | None = None
 
+    CLOUD_SQL_CONNECTION_NAME: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_database_connection_target(self) -> Self:
+        has_postgres_server = bool(
+            self.POSTGRES_SERVER and self.POSTGRES_SERVER.strip()
+        )
+        has_cloud_sql_socket = bool(
+            self.CLOUD_SQL_CONNECTION_NAME and self.CLOUD_SQL_CONNECTION_NAME.strip()
+        )
+
+        if not has_postgres_server and not has_cloud_sql_socket:
+            raise ValueError(
+                "Either POSTGRES_SERVER or CLOUD_SQL_CONNECTION_NAME must be set"
+            )
+
+        return self
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
+        if self.CLOUD_SQL_CONNECTION_NAME:
+            return cast(
+                PostgresDsn,
+                f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+                f"@/{self.POSTGRES_DB}?host=/cloudsql/{self.CLOUD_SQL_CONNECTION_NAME}",
+            )
+
+        # LOCAL MODE (Neon/Docker)
         return PostgresDsn.build(
             scheme="postgresql+psycopg",
             username=self.POSTGRES_USER,
@@ -139,9 +165,9 @@ class Settings(BaseSettings):
 
         return self
 
-    GITHUB_APP_ID: int
-    GITHUB_PRIVATE_KEY: str  # The full text of the .pem file
-    GITHUB_WEBHOOK_SECRET: str
+    GITHUB_APP_ID: int | None = None
+    GITHUB_PRIVATE_KEY: str | None = None  # The full text of the .pem file
+    GITHUB_WEBHOOK_SECRET: str | None = None
     GITHUB_APP_SLUG: str | None = None  # e.g. "resourceiq-dev", used for install URL
 
     @property
@@ -156,12 +182,24 @@ class Settings(BaseSettings):
             slug = slug.split("/")[-1]
         return f"https://github.com/apps/{slug}/installations/new"
 
-    JINA_API_KEY: str
+    JINA_API_KEY: str | None = None
     JINA_API_URL: str = "https://api.jina.ai"
     JINA_EMBEDDING_MODEL1: str = "jina-code-embeddings-0.5b"  # API model (1536 dims)
     JINA_EMBEDDING_MODEL2: str = "jinaai/jina-code-embeddings-0.5b"  # Local model
     USE_JINA_API: bool = False
     EMBEDDING_DIMENSION: int = 1536  # Must match database Vector(dim=1536)
+
+    # Redis sidecar for long-running task status + logs
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    TASK_STATUS_TTL_SECONDS: int = 86400
+
+    @model_validator(mode="after")
+    def _validate_jina_settings(self) -> Self:
+        if self.USE_JINA_API and not self.JINA_API_KEY:
+            raise ValueError("JINA_API_KEY is required when USE_JINA_API is True")
+        return self
 
     # Google Cloud / Vertex AI
     GCP_PROJECT_ID: str | None = None

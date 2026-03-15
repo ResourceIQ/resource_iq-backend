@@ -1,8 +1,6 @@
 """Jira integration Pydantic schemas."""
 
 from datetime import datetime
-from enum import Enum
-from typing import Any
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -22,28 +20,6 @@ class JiraAuthCallbackResponse(BaseModel):
     jira_site_url: HttpUrl | None = None
     expires_at: datetime | None = None
     scope: str | None = None
-
-
-class JiraIssueStatus(str, Enum):
-    """Common Jira issue statuses."""
-
-    TO_DO = "To Do"
-    IN_PROGRESS = "In Progress"
-    IN_REVIEW = "In Review"
-    DONE = "Done"
-    CLOSED = "Closed"
-    OPEN = "Open"
-
-
-class JiraOpenIssue(BaseModel):
-    """Lightweight schema for a single open Jira issue."""
-
-    issue_id: str = Field(..., description="Internal Jira issue ID (numeric string)")
-    issue_key: str = Field(..., description="Human-readable issue key, e.g. PROJ-42")
-    title: str = Field(..., description="Issue summary / title")
-    description: str | None = Field(default=None, description="Issue description text")
-    status: str = Field(..., description="Current issue status")
-    priority: str | None = Field(default=None, description="Issue priority level")
 
 
 class JiraUser(BaseModel):
@@ -122,83 +98,6 @@ class JiraSyncResponse(BaseModel):
     sync_duration_seconds: float
 
 
-class JiraWebhookEvent(BaseModel):
-    """Schema for Jira webhook event payload."""
-
-    webhook_event: str = Field(..., alias="webhookEvent")
-    issue_event_type_name: str | None = Field(
-        default=None, alias="issue_event_type_name"
-    )
-    timestamp: int | None = None
-    issue: dict[str, Any] | None = None
-    user: dict[str, Any] | None = None
-    changelog: dict[str, Any] | None = None
-
-    class Config:
-        populate_by_name = True
-
-
-class DeveloperWorkload(BaseModel):
-    """Schema for developer workload calculation."""
-
-    jira_account_id: str
-    display_name: str | None
-    email: str | None
-
-    # Workload metrics
-    open_issues: int = Field(
-        default=0, description="Issues with status 'Open' or 'To Do'"
-    )
-    in_progress_issues: int = Field(
-        default=0, description="Issues with status 'In Progress'"
-    )
-    in_review_issues: int = Field(
-        default=0, description="Issues with status 'In Review'"
-    )
-    total_active_issues: int = Field(default=0, description="Total active issues")
-
-    # Breakdown by priority
-    high_priority_count: int = Field(
-        default=0, description="High/Highest priority issues"
-    )
-    medium_priority_count: int = Field(default=0, description="Medium priority issues")
-    low_priority_count: int = Field(default=0, description="Low/Lowest priority issues")
-
-    # Breakdown by issue type
-    bugs_count: int = Field(default=0)
-    tasks_count: int = Field(default=0)
-    stories_count: int = Field(default=0)
-    other_count: int = Field(default=0)
-
-    # Calculated workload score (higher = more busy)
-    workload_score: float = Field(
-        default=0.0,
-        description="Weighted workload score based on priority and issue type",
-    )
-
-    last_updated: datetime | None = None
-
-
-class UserMappingRequest(BaseModel):
-    """Request schema for mapping Jira user to internal profile."""
-
-    jira_account_id: str
-    internal_user_id: str | None = None
-    github_login: str | None = None
-
-
-class UserMappingResponse(BaseModel):
-    """Response schema for user mapping."""
-
-    jira_account_id: str
-    jira_display_name: str | None
-    jira_email: str | None
-    github_login: str | None
-    github_id: int | None
-    internal_user_id: str | None
-    mapped: bool
-
-
 class JiraIssueTypeStatusResponse(BaseModel):
     """Response for a single issue type with its status configuration."""
 
@@ -218,4 +117,46 @@ class JiraIssueTypeStatusUpdateRequest(BaseModel):
     selected_statuses: list[str] = Field(
         ...,
         description="Statuses that qualify issues of this type for embedding",
+    )
+
+
+class JiraCreateIssueRequest(BaseModel):
+    """Request schema for creating a Jira issue."""
+
+    project_key: str = Field(..., description="Jira project key (e.g. PROJ)")
+    summary: str = Field(..., description="Issue summary / title")
+    description: str | None = Field(default=None, description="Issue description")
+    issue_type: str = Field(default="Task", description="Issue type name")
+    assignee_user_id: str | None = Field(
+        default=None,
+        description="ResourceIQ user_id (UUID) to assign. Resolved to jira_account_id internally.",
+    )
+
+
+class JiraCreateIssueResponse(BaseModel):
+    """Response schema for a newly created Jira issue."""
+
+    issue_key: str = Field(..., description="Created issue key (e.g. PROJ-42)")
+    issue_url: str = Field(..., description="Browse URL for the issue")
+    summary: str
+    assigned_to: str | None = Field(
+        default=None, description="Display name of the assignee"
+    )
+
+
+class JiraAssignIssueRequest(BaseModel):
+    """Request schema for assigning / reassigning a Jira issue."""
+
+    assignee_user_id: str = Field(
+        ...,
+        description="ResourceIQ user_id (UUID) to assign.",
+    )
+
+
+class JiraAssignIssueResponse(BaseModel):
+    """Response after assigning a Jira issue."""
+
+    issue_key: str
+    assigned_to: str | None = Field(
+        default=None, description="Display name of the new assignee"
     )

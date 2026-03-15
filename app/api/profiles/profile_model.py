@@ -24,6 +24,11 @@ class ResourceProfile(SQLModel, table=True):
         foreign_key="user.id",
         description="ResourceIQ user UUID (1-to-1 relationship)",
     )
+    phone_number: str | None = Field(default=None, description="Contact phone number")
+    address: str | None = Field(
+        default=None, description="Residentaial or work address"
+    )
+
     position: str | None = Field(
         default=None, description="Job position/title of the resource"
     )

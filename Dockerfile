@@ -15,13 +15,14 @@ WORKDIR /app/
 
 ENV PATH="/app/.venv/bin:$PATH"
 
+
+
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --package app
 
 COPY ./scripts /app/scripts
-
 COPY ./pyproject.toml ./alembic.ini /app/
 COPY ./app /app/app
 
@@ -32,4 +33,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 WORKDIR /app/
 
-CMD ["fastapi", "run", "--workers", "4", "app/main.py"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers ${WEB_CONCURRENCY:-1}"]

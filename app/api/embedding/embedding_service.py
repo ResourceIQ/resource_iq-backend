@@ -1,16 +1,27 @@
 import logging
+import math
 import re
+import time
 import unicodedata
 from typing import Any, cast
 
 import requests
 from sqlalchemy.orm import Session
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.api.embedding.embedding_model import GitHubPRVector
 from app.api.integrations.GitHub.github_schema import GitHubUser, PullRequestContent
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def is_retryable_error(exception: BaseException) -> bool:
+    """Check if the exception corresponds to a retryable error (Connection, 429, 5xx)."""
+    if isinstance(exception, requests.exceptions.HTTPError):
+        status_code = exception.response.status_code if exception.response else 0
+        return status_code == 429 or status_code >= 500
+    return isinstance(exception, requests.exceptions.RequestException)
 
 
 class VectorEmbeddingService:
@@ -24,6 +35,10 @@ class VectorEmbeddingService:
         self.use_api = use_api
 
         if use_api:
+            if not settings.JINA_API_KEY:
+                raise ValueError(
+                    "JINA_API_KEY is required when embeddings are configured to use the Jina API"
+                )
             self.api_key = settings.JINA_API_KEY
             self.api_url = f"{settings.JINA_API_URL}/v1/embeddings"
             self.embedding_model = settings.JINA_EMBEDDING_MODEL1
@@ -85,50 +100,96 @@ class VectorEmbeddingService:
         return text.strip() or "Empty content after cleaning"
 
     def _generate_embeddings_api(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings using Jina API."""
-        try:
-            # Clean all texts before sending to API
-            cleaned_texts = [self._clean_text_for_embedding(text) for text in texts]
+        """Generate embeddings using Jina API with batching and rate limiting."""
+        # Constants for rate limiting
+        batch_size = 30  # Conservative batch size
+        rpm_limit = 100
+        tpm_limit = 100000
+        safety_margin = 0.8  # Use 80% to be very safe
 
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-            }
+        # 60s / (100 * 0.8) = 0.75s per request minimum
+        min_request_interval = 60.0 / (rpm_limit * safety_margin)
+        # (100000 * 0.8) / 60 = 1333 tokens/s
+        tokens_per_second = (tpm_limit * safety_margin) / 60.0
 
-            payload = {"model": self.embedding_model, "input": cleaned_texts}
+        all_embeddings: list[list[float]] = []
 
-            logger.info(
-                f"Calling Jina API with model: {self.embedding_model}, URL: {self.api_url}"
-            )
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i : i + batch_size]
 
-            response = requests.post(
-                self.api_url, json=payload, headers=headers, timeout=60
-            )
+            # Clean texts first
+            cleaned_batch = [self._clean_text_for_embedding(t) for t in batch_texts]
 
-            if response.status_code != 200:
-                logger.error(f"Jina API Error - Status: {response.status_code}")
-                logger.error(f"Response body: {response.text}")
+            # Estimate tokens (approx 4 chars per token)
+            total_chars = sum(len(t) for t in cleaned_batch)
+            estimated_tokens = math.ceil(total_chars / 4)
 
-            response.raise_for_status()
+            start_time = time.time()
 
-            response_data = cast(dict[str, Any], response.json())
-            data_items = cast(list[dict[str, Any]], response_data.get("data", []))
-            embeddings: list[list[float]] = []
-            for item in data_items:
-                embedding = item.get("embedding") if isinstance(item, dict) else None
-                if isinstance(embedding, list):
-                    embeddings.append(cast(list[float], embedding))
-            logger.info(f"Generated {len(embeddings)} embeddings via Jina API")
-            return embeddings
+            try:
+                batch_embeddings = self._call_jina_api_with_retry(cleaned_batch)
+                all_embeddings.extend(batch_embeddings)
+            except Exception as e:
+                logger.error(
+                    f"Failed to process batch {i // batch_size} (indices {i}-{i + batch_size}): {str(e)}"
+                )
+                raise
 
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"HTTP Error from Jina API: {str(e)}")
-            if e.response is not None:
-                logger.error(f"Response content: {e.response.text}")
-            raise
-        except Exception as e:
-            logger.error(f"Error generating embeddings via API: {str(e)}")
-            raise
+            # Calculate rate limit delay
+            # specific delay for tokens
+            token_delay = estimated_tokens / tokens_per_second
+            # max of rpm delay and tpm delay
+            required_delay = max(min_request_interval, token_delay)
+
+            elapsed = time.time() - start_time
+            sleep_time = required_delay - elapsed
+
+            if sleep_time > 0:
+                logger.debug(
+                    f"Rate limiting: sleeping {sleep_time:.2f}s (tokens: {estimated_tokens})"
+                )
+                time.sleep(sleep_time)
+
+        return all_embeddings
+
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=2, max=20),
+        retry=retry_if_exception(is_retryable_error),
+    )
+    def _call_jina_api_with_retry(self, texts: list[str]) -> list[list[float]]:
+        """Helper to call Jina API with retry logic."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+        payload = {"model": self.embedding_model, "input": texts}
+
+        logger.info(
+            f"Calling Jina API with model: {self.embedding_model}, Batch size: {len(texts)}"
+        )
+
+        response = requests.post(
+            self.api_url, json=payload, headers=headers, timeout=60
+        )
+
+        if not response.ok:
+            logger.error(f"Jina API Error: {response.status_code} - {response.text}")
+
+        response.raise_for_status()
+
+        response_data = cast(dict[str, Any], response.json())
+        data_items = cast(list[dict[str, Any]], response_data.get("data", []))
+
+        embeddings: list[list[float]] = []
+        for item in data_items:
+            embedding = item.get("embedding") if isinstance(item, dict) else None
+            # Simple list check
+            if isinstance(embedding, list):
+                embeddings.append(cast(list[float], embedding))
+
+        return embeddings
 
     def _generate_embeddings_local(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings using local Jina model."""
@@ -142,72 +203,121 @@ class VectorEmbeddingService:
 
     def store_pr_contexts(
         self, author: GitHubUser, pr_contents: list[PullRequestContent]
-    ) -> None:
-        """Store PR contexts with embeddings in pgvector."""
+    ) -> int:
+        """Store PR contexts with embeddings in pgvector. Returns count of successfully stored PRs."""
         if not pr_contents:
             logger.info(f"No PR contexts to store for author {author.login}")
-            return
+            return 0
 
-        # Prepare pr_context for embedding
-        pr_contexts = [pr.context or "" for pr in pr_contents]
+        # Filter out PRs that are already embedded to save API calls
+        pr_ids = [str(pr.id) for pr in pr_contents]
+        existing_pr_ids: set[str] = set()
+
+        try:
+            # Query existing PR IDs efficiently
+            pr_id_column = cast(Any, GitHubPRVector.pr_id)
+            existing_records = (
+                self.db.query(pr_id_column).filter(pr_id_column.in_(pr_ids)).all()
+            )
+            existing_pr_ids = {r[0] for r in existing_records}
+        except Exception as e:
+            logger.warning(
+                f"Failed to check existing PRs, proceeding with full list: {e}"
+            )
+
+        # Keep only new PRs
+        new_pr_contents = [
+            pr for pr in pr_contents if str(pr.id) not in existing_pr_ids
+        ]
+        skipped_count = len(pr_contents) - len(new_pr_contents)
+
+        if skipped_count > 0:
+            logger.info(
+                f"Skipped {skipped_count} existing PR embeddings for {author.login}. Processing {len(new_pr_contents)} new PRs."
+            )
+
+        if not new_pr_contents:
+            return skipped_count
+
+        # Prepare pr_context for embedding (using only new PRs)
+        pr_contexts = [pr.context or "" for pr in new_pr_contents]
+        embeddings: list[list[float] | None] = []
 
         # Generate embeddings with fallback to local model if API fails
         try:
-            embeddings = self.generate_embeddings(pr_contexts)
+            valid_embeddings = self.generate_embeddings(pr_contexts)
+            embeddings = cast(list[list[float] | None], valid_embeddings)
         except Exception as e:
             logger.warning(
                 f"Batch embedding failed for {author.login}, processing individually: {str(e)}"
             )
-            embeddings_fallback: list[list[float]] = []
+            embeddings = []
             for i, doc in enumerate(pr_contexts):
                 try:
                     single_embedding = self.generate_embeddings([doc])[0]
-                    embeddings_fallback.append(single_embedding)
-                except Exception as doc_error:
-                    logger.error(
-                        f"Failed to embed PR {pr_contents[i].number} for {author.login}: {str(doc_error)}"
+                    embeddings.append(single_embedding)
+                except Exception:
+                    logger.warning(
+                        f"Initial embedding failed for PR {new_pr_contents[i].number}. Retrying with shorter text..."
                     )
-                    logger.error(f"Problematic text preview: {doc[:200]}...")
-                    # Skip this PR
-                    continue
-            embeddings = embeddings_fallback
+                    try:
+                        # Try very aggressive truncation as last resort (1000 chars)
+                        short_doc = doc[:1000] + "... [truncated]"
+                        single_embedding = self.generate_embeddings([short_doc])[0]
+                        embeddings.append(single_embedding)
+                        logger.info(
+                            f"Successfully embedded truncated version of PR {new_pr_contents[i].number}"
+                        )
+                    except Exception:
+                        # Emergency fallback - use minimal text (title) to ensure we get a vector
+                        try:
+                            logger.info(
+                                f"Attempting emergency fallback for PR {new_pr_contents[i].number} using title only"
+                            )
+                            minimal_doc = f"PR: {new_pr_contents[i].title}"
+                            minimal_doc = self._clean_text_for_embedding(minimal_doc)
+                            single_embedding = self.generate_embeddings([minimal_doc])[
+                                0
+                            ]
+                            embeddings.append(single_embedding)
+                            logger.info(
+                                f"Successfully used minimal fallback for PR {new_pr_contents[i].number}"
+                            )
+                        except Exception as final_error:
+                            logger.error(
+                                f"Final failure to embed PR {new_pr_contents[i].number} for {author.login}: {str(final_error)}"
+                            )
+                            embeddings.append(None)
 
+        success_count = 0
         # Store in database
-        for pr, embedding in zip(pr_contents, embeddings, strict=False):
-            try:
-                # Check if already exists
-                pr_filter = cast(Any, GitHubPRVector.pr_id == str(pr.id))
-                existing = self.db.query(GitHubPRVector).filter(pr_filter).first()
+        for pr, embedding in zip(new_pr_contents, embeddings, strict=False):
+            if embedding is None:
+                continue
 
-                if existing:
-                    # Update existing
-                    existing.embedding = embedding
-                    existing.context = pr.context or ""
-                    existing.pr_url = str(pr.html_url)
-                    existing.pr_title = pr.title
-                    existing.pr_description = pr.body or ""
-                    logger.debug(f"Updated PR {pr.number}")
-                else:
-                    # Create new
-                    db_pr_vector = GitHubPRVector(
-                        pr_id=str(pr.id),
-                        pr_number=pr.number,
-                        author_login=pr.author.login,
-                        author_id=pr.author.id,
-                        repo_id=pr.repo_id,
-                        repo_name=pr.repo_name or "",
-                        pr_title=pr.title,
-                        pr_url=str(pr.html_url),
-                        pr_description=pr.body or "",
-                        embedding=embedding,
-                        context=pr.context or "",
-                        metadata_json={
-                            "changed_files": pr.changed_files or [],
-                            "labels": pr.labels or [],
-                        },
-                    )
-                    self.db.add(db_pr_vector)
-                    logger.debug(f"Created PR {pr.number}")
+            try:
+                # We already know these are new, so just create
+                db_pr_vector = GitHubPRVector(
+                    pr_id=str(pr.id),
+                    pr_number=pr.number,
+                    author_login=pr.author.login,
+                    author_id=pr.author.id,
+                    repo_id=pr.repo_id,
+                    repo_name=pr.repo_name or "",
+                    pr_title=pr.title,
+                    pr_url=str(pr.html_url),
+                    pr_description=pr.body or "",
+                    embedding=embedding,
+                    context=pr.context or "",
+                    metadata_json={
+                        "changed_files": pr.changed_files or [],
+                        "labels": pr.labels or [],
+                    },
+                )
+                self.db.add(db_pr_vector)
+                logger.debug(f"Created PR {pr.number}")
+
+                success_count += 1
 
             except Exception as e:
                 logger.error(f"Error storing PR {pr.number}: {str(e)}")
@@ -215,7 +325,9 @@ class VectorEmbeddingService:
                 continue
 
         self.db.commit()
-        logger.info(f"Stored {len(embeddings)} PR vectors for {author.login}")
+        logger.info(f"Stored {success_count} new PR vectors for {author.login}")
+        # Return total processed (skipped + newly stored) so the caller gets accurate "synced" count
+        return success_count + skipped_count
 
     def _normalize_embedding_dimension(self, embedding: list[float]) -> list[float]:
         """Normalize embedding to configured dimensions (default 1536)."""
@@ -242,7 +354,7 @@ class VectorEmbeddingService:
         for _author_login, pr_contents in authors_prs.items():
             if pr_contents:
                 author = pr_contents[0].author
-                self.store_pr_contexts(author, pr_contents)
-                total_stored += len(pr_contents)
+                stored_count = self.store_pr_contexts(author, pr_contents)
+                total_stored += stored_count
 
         logger.info(f"Total PRs stored: {total_stored}")

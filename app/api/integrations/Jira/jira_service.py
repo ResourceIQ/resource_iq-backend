@@ -24,13 +24,15 @@ from app.api.integrations.Jira.jira_model import (
     JiraOrgIntegration,
 )
 from app.api.integrations.Jira.jira_schema import (
-    DeveloperWorkload,
+    JiraAssignIssueRequest,
+    JiraAssignIssueResponse,
     JiraAuthCallbackResponse,
     JiraAuthConnectResponse,
     JiraComment,
+    JiraCreateIssueRequest,
+    JiraCreateIssueResponse,
     JiraIssueContent,
     JiraIssueTypeStatusResponse,
-    JiraOpenIssue,
     JiraSyncResponse,
     JiraUser,
 )
@@ -477,100 +479,6 @@ class JiraIntegrationService:
         except httpx.RequestError as e:
             raise ValueError(f"HTTP error fetching users: {str(e)}")
 
-    def get_project_users(
-        self, project_key: str, max_results: int = 100
-    ) -> list[dict[str, Any]]:
-        """Retrieve all users who are members/assignable in a specific project."""
-        client = self.get_jira_client()
-
-        auth_header = client._session.headers.get("Authorization")
-        if not auth_header:
-            raise ValueError("No Authorization header in session")
-
-        server = client._options["server"]
-        headers = {
-            "Authorization": auth_header,
-            "Accept": "application/json",
-        }
-
-        try:
-            # Use user/assignable/search to get users assignable to issues in project
-            resp = httpx.get(
-                f"{server}/rest/api/3/user/assignable/search",
-                headers=headers,
-                params={"project": project_key, "maxResults": max_results},
-                timeout=15,
-            )
-
-            if resp.status_code == 401:
-                raise ValueError("OAuth token is invalid or unauthorized")
-            elif resp.status_code == 404:
-                raise ValueError(f"Project '{project_key}' not found")
-            elif resp.status_code != 200:
-                raise ValueError(
-                    f"Failed to fetch project users: HTTP {resp.status_code} - {resp.text}"
-                )
-
-            users = resp.json()
-            return [
-                {
-                    "account_id": u.get("accountId"),
-                    "display_name": u.get("displayName"),
-                    "email": u.get("emailAddress"),
-                    "avatar_url": u.get("avatarUrls", {}).get("48x48"),
-                    "active": u.get("active", True),
-                    "account_type": u.get("accountType"),
-                }
-                for u in users
-            ]
-        except httpx.RequestError as e:
-            raise ValueError(f"HTTP error fetching project users: {str(e)}")
-
-    def get_user_by_account_id(self, account_id: str) -> dict[str, Any]:
-        """Retrieve a specific Jira user by their account ID."""
-        client = self.get_jira_client()
-
-        auth_header = client._session.headers.get("Authorization")
-        if not auth_header:
-            raise ValueError("No Authorization header in session")
-
-        server = client._options["server"]
-        headers = {
-            "Authorization": auth_header,
-            "Accept": "application/json",
-        }
-
-        try:
-            resp = httpx.get(
-                f"{server}/rest/api/3/user",
-                headers=headers,
-                params={"accountId": account_id},
-                timeout=10,
-            )
-
-            if resp.status_code == 401:
-                raise ValueError("OAuth token is invalid or unauthorized")
-            elif resp.status_code == 404:
-                raise ValueError(f"User with account ID '{account_id}' not found")
-            elif resp.status_code != 200:
-                raise ValueError(
-                    f"Failed to fetch user: HTTP {resp.status_code} - {resp.text}"
-                )
-
-            u = resp.json()
-            return {
-                "account_id": u.get("accountId"),
-                "display_name": u.get("displayName"),
-                "email": u.get("emailAddress"),
-                "avatar_url": u.get("avatarUrls", {}).get("48x48"),
-                "active": u.get("active", True),
-                "account_type": u.get("accountType"),
-                "timezone": u.get("timeZone"),
-                "locale": u.get("locale"),
-            }
-        except httpx.RequestError as e:
-            raise ValueError(f"HTTP error fetching user: {str(e)}")
-
     def fetch_issues(
         self,
         project_key: str | None = None,
@@ -618,52 +526,6 @@ class JiraIntegrationService:
         )
 
         return list(issues)
-
-    def get_open_issues(
-        self,
-        project_key: str | None = None,
-        max_results: int = 100,
-    ) -> list[JiraOpenIssue]:
-        """
-        Fetch all open (non-Done/Closed/Resolved) Jira issues.
-
-        Returns a lightweight list containing issue_id, issue_key,
-        title (summary), description, status, and priority.
-
-        Args:
-            project_key: Optionally restrict to a single project.
-            max_results: Maximum number of issues to return.
-        """
-        jql_parts = ['status NOT IN ("Done", "Closed", "Resolved")']
-        if project_key:
-            jql_parts.insert(0, f'project = "{project_key}"')
-        jql = " AND ".join(jql_parts) + " ORDER BY created DESC"
-
-        issues = self.fetch_issues(
-            jql=jql,
-            max_results=max_results,
-            include_closed=False,
-        )
-
-        result: list[JiraOpenIssue] = []
-        for issue in issues:
-            fields = issue.fields
-            raw_desc = getattr(fields, "description", None)
-            # Jira Cloud returns ADF (dict) for description; fall back to None
-            description: str | None = raw_desc if isinstance(raw_desc, str) else None
-
-            result.append(
-                JiraOpenIssue(
-                    issue_id=issue.id,
-                    issue_key=issue.key,
-                    title=fields.summary,
-                    description=description,
-                    status=fields.status.name if fields.status else "Unknown",
-                    priority=fields.priority.name if fields.priority else None,
-                )
-            )
-
-        return result
 
     def fetch_issue_types(self) -> list[dict[str, Any]]:
         """Fetch all issue types from the Jira instance."""
@@ -1072,13 +934,13 @@ class JiraIntegrationService:
 
         if generate_embeddings and embedding_eligible:
             try:
-                vectors_created, vectors_updated = self._store_issue_embeddings(
+                vectors_created, vectors_skipped = self._store_issue_embeddings(
                     embedding_eligible
                 )
-                embeddings_generated = vectors_created + vectors_updated
+                embeddings_generated = vectors_created + vectors_skipped
                 logger.info(
-                    f"Embeddings: {embeddings_generated} from "
-                    f"{len(embedding_eligible)}/{len(all_issue_contents)} "
+                    f"Embeddings: {vectors_created} new, {vectors_skipped} skipped (already embedded), "
+                    f"from {len(embedding_eligible)}/{len(all_issue_contents)} "
                     f"status-matched issues"
                 )
             except Exception as e:
@@ -1124,7 +986,7 @@ class JiraIntegrationService:
         self, issues: list[JiraIssueContent]
     ) -> tuple[int, int]:
         """
-        Generate and store embeddings for issues.
+        Generate and store embeddings for issues, skipping already embedded ones.
 
         The embedding generation step (model inference) can take many minutes.
         To avoid PostgreSQL killing the idle-in-transaction connection we:
@@ -1134,17 +996,44 @@ class JiraIntegrationService:
         if not issues:
             return (0, 0)
 
-        contexts = [issue.context or "" for issue in issues if issue.context]
         valid_issues = [issue for issue in issues if issue.context]
 
-        if not contexts:
+        if not valid_issues:
             return (0, 0)
 
+        # --- Filter out already-embedded issues to save API calls ---------------
+        issue_ids = [issue.issue_id for issue in valid_issues]
+        existing_issue_ids: set[str] = set()
+
+        try:
+            issue_id_column = cast(Any, JiraIssueVector.issue_id)
+            existing_records = (
+                self.db.query(issue_id_column)
+                .filter(issue_id_column.in_(issue_ids))
+                .all()
+            )
+            existing_issue_ids = {r[0] for r in existing_records}
+        except Exception as e:
+            logger.warning(
+                f"Failed to check existing issue vectors, proceeding with full list: {e}"
+            )
+
+        new_issues = [
+            issue for issue in valid_issues if issue.issue_id not in existing_issue_ids
+        ]
+        skipped_count = len(valid_issues) - len(new_issues)
+
+        if skipped_count > 0:
+            logger.info(
+                f"Skipped {skipped_count} already-embedded Jira issues. Processing {len(new_issues)} new issues."
+            )
+
+        if not new_issues:
+            return (0, skipped_count)
+
+        contexts = [issue.context or "" for issue in new_issues]
+
         # --- Phase 1: release the DB connection before long compute -------------
-        #     commit() ends the transaction; close() returns the connection to
-        #     the pool.  On next use SQLAlchemy will check out a fresh (and
-        #     pool_pre_ping-verified) connection, avoiding stale-socket errors
-        #     after minutes of idle time.
         try:
             self.db.commit()
         except Exception:
@@ -1152,60 +1041,80 @@ class JiraIntegrationService:
         self.db.close()
 
         # --- Phase 2: generate embeddings (pure compute, no DB) ---------------
+        embeddings: list[list[float] | None] = []
         try:
-            embeddings = self.vector_service.generate_embeddings(contexts)
+            raw = self.vector_service.generate_embeddings(contexts)
+            embeddings = cast(list[list[float] | None], raw)
         except Exception as e:
             logger.warning(f"Batch embedding failed, processing individually: {str(e)}")
             embeddings = []
-            for context in contexts:
+            for i, context in enumerate(contexts):
                 try:
-                    embedding = self.vector_service.generate_embeddings([context])[0]
-                    embeddings.append(embedding)
-                except Exception as doc_error:
-                    logger.error(f"Failed to embed context: {str(doc_error)}")
+                    generated_embedding = self.vector_service.generate_embeddings(
+                        [context]
+                    )[0]
+                    embeddings.append(generated_embedding)
+                except Exception:
+                    logger.warning(
+                        f"Initial embedding failed for {new_issues[i].issue_key}. Retrying with shorter text..."
+                    )
+                    try:
+                        short_context = context[:1000] + "... [truncated]"
+                        generated_embedding = self.vector_service.generate_embeddings(
+                            [short_context]
+                        )[0]
+                        embeddings.append(generated_embedding)
+                        logger.info(
+                            f"Successfully embedded truncated version of {new_issues[i].issue_key}"
+                        )
+                    except Exception:
+                        # Emergency fallback: use issue key + summary only
+                        try:
+                            minimal = f"Issue: {new_issues[i].issue_key} - {new_issues[i].summary}"
+                            minimal = self.vector_service._clean_text_for_embedding(
+                                minimal
+                            )
+                            generated_embedding = (
+                                self.vector_service.generate_embeddings([minimal])[0]
+                            )
+                            embeddings.append(generated_embedding)
+                            logger.info(
+                                f"Successfully used minimal fallback for {new_issues[i].issue_key}"
+                            )
+                        except Exception as final_error:
+                            logger.error(
+                                f"Final failure to embed {new_issues[i].issue_key}: {str(final_error)}"
+                            )
+                            embeddings.append(None)
 
         # --- Phase 3: write to DB in batches with per-item recovery -----------
         created_count = 0
-        updated_count = 0
         batch_size = 10
 
         for idx, (issue, embedding) in enumerate(
-            zip(valid_issues, embeddings, strict=False)
+            zip(new_issues, embeddings, strict=False)
         ):
+            if embedding is None:
+                continue
+
             try:
-                embedding = self.vector_service._normalize_embedding_dimension(
+                normalized = self.vector_service._normalize_embedding_dimension(
                     embedding
                 )
 
-                existing = (
-                    self.db.query(JiraIssueVector)
-                    .filter(cast(Any, JiraIssueVector.issue_id == issue.issue_id))
-                    .first()
-                )
-
-                if existing:
-                    existing.embedding = embedding
-                    existing.context = issue.context or ""
-                    existing.issue_key = issue.issue_key
-                    existing.project_key = issue.project_key
-                    existing.assignee_account_id = (
+                # We already know these are new, so just create
+                db_vector = JiraIssueVector(
+                    issue_id=issue.issue_id,
+                    issue_key=issue.issue_key,
+                    project_key=issue.project_key,
+                    assignee_account_id=(
                         issue.assignee.account_id if issue.assignee else None
-                    )
-                    existing.updated_at = datetime.utcnow()
-                    updated_count += 1
-                else:
-                    db_vector = JiraIssueVector(
-                        issue_id=issue.issue_id,
-                        issue_key=issue.issue_key,
-                        project_key=issue.project_key,
-                        assignee_account_id=(
-                            issue.assignee.account_id if issue.assignee else None
-                        ),
-                        embedding=embedding,
-                        context=issue.context or "",
-                    )
-                    self.db.add(db_vector)
-                    created_count += 1
+                    ),
+                    embedding=normalized,
+                    context=issue.context or "",
+                )
+                self.db.add(db_vector)
+                created_count += 1
 
                 if (idx + 1) % batch_size == 0:
                     self.db.commit()
@@ -1224,36 +1133,10 @@ class JiraIntegrationService:
             logger.error(f"Error committing final embedding batch: {str(e)}")
             self.db.rollback()
 
-        return (created_count, updated_count)
-
-    def calculate_developer_workload(self, jira_account_id: str) -> DeveloperWorkload:
-        """
-        Calculate workload for a developer based on their vector entries.
-        Calculates workload score based on active issues.
-        Note: Full workload details require fetching live from Jira API.
-        """
-        # Get resource profile
-        profile = (
-            self.db.query(ResourceProfile)
-            .filter(cast(Any, ResourceProfile.jira_account_id == jira_account_id))
-            .first()
+        logger.info(
+            f"Stored {created_count} new Jira issue vectors. Skipped {skipped_count} existing."
         )
-
-        # Count vectors assigned to this developer
-        vector_count = (
-            self.db.query(JiraIssueVector)
-            .filter(cast(Any, JiraIssueVector.assignee_account_id == jira_account_id))
-            .count()
-        )
-
-        return DeveloperWorkload(
-            jira_account_id=jira_account_id,
-            display_name=profile.jira_display_name if profile else None,
-            email=profile.jira_email if profile else None,
-            total_active_issues=vector_count,
-            workload_score=float(vector_count),
-            last_updated=datetime.utcnow(),
-        )
+        return (created_count, skipped_count)
 
     def _update_resource_profiles_from_vectors(
         self, issues: list[JiraIssueContent]
@@ -1299,86 +1182,122 @@ class JiraIntegrationService:
                     f"Error updating resource profile for {account_id}: {str(e)}"
                 )
 
-    def get_all_developers(self) -> list[dict[str, Any]]:
-        """Get all users with Jira accounts connected."""
-        profiles = (
-            self.db.query(ResourceProfile)
-            .filter(cast(Any, ResourceProfile.jira_account_id).isnot(None))
-            .all()
-        )
-        return [
-            {
-                "user_id": str(p.user_id),
-                "jira_account_id": p.jira_account_id,
-                "display_name": p.jira_display_name,
-                "email": p.jira_email,
-                "github_login": p.github_login,
-                "jira_workload": p.jira_workload,
-                "github_workload": p.github_workload,
-                "total_workload": p.total_workload,
-                "skills": p.skills.split(",") if p.skills else [],
-                "domains": p.domains.split(",") if p.domains else [],
-            }
-            for p in profiles
-        ]
+    def create_issue(self, request: JiraCreateIssueRequest) -> JiraCreateIssueResponse:
+        """Create a Jira issue and optionally assign it to a user."""
+        client = self.get_jira_client()
+        auth_header = client._session.headers.get("Authorization")
+        if not auth_header:
+            raise ValueError("No Authorization header in session")
 
-    def search_similar_issues(
-        self,
-        query: str,
-        n_results: int = 5,
-        project_key: str | None = None,
-        assignee_account_id: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """
-        Search for similar Jira issues using vector similarity.
-        Useful for finding related issues or recommending developers.
-        """
-        try:
-            # Generate embedding for query
-            query_embedding = self.vector_service.generate_embeddings([query])[0]
-            query_embedding = self.vector_service._normalize_embedding_dimension(
-                query_embedding
-            )
+        server = client._options["server"]
+        headers = {
+            "Authorization": auth_header,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
 
-            # Build query
-            query_obj = self.db.query(JiraIssueVector)
+        assignee_account_id: str | None = None
+        assignee_display_name: str | None = None
 
-            if project_key:
-                query_obj = query_obj.filter(
-                    cast(Any, JiraIssueVector.project_key == project_key)
-                )
-
-            if assignee_account_id:
-                query_obj = query_obj.filter(
+        if request.assignee_user_id:
+            profile = (
+                self.db.query(ResourceProfile)
+                .filter(
                     cast(
-                        Any, JiraIssueVector.assignee_account_id == assignee_account_id
+                        Any,
+                        ResourceProfile.user_id == request.assignee_user_id,
                     )
                 )
+                .first()
+            )
+            if not profile or not profile.jira_account_id:
+                raise ValueError("User does not have a connected Jira account")
+            assignee_account_id = profile.jira_account_id
+            assignee_display_name = profile.jira_display_name
 
-            # Order by similarity
-            results = (
-                query_obj.order_by(
-                    JiraIssueVector.embedding.l2_distance(query_embedding)
-                )
-                .limit(n_results)
-                .all()
+        issue_fields: dict[str, Any] = {
+            "project": {"key": request.project_key},
+            "summary": request.summary,
+            "issuetype": {"name": request.issue_type},
+        }
+
+        if request.description:
+            issue_fields["description"] = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": request.description}],
+                    }
+                ],
+            }
+
+        if assignee_account_id:
+            issue_fields["assignee"] = {"id": assignee_account_id}
+
+        resp = httpx.post(
+            f"{server}/rest/api/3/issue",
+            headers=headers,
+            json={"fields": issue_fields},
+            timeout=15,
+        )
+
+        if resp.status_code not in (200, 201):
+            raise ValueError(
+                f"Failed to create issue: HTTP {resp.status_code} - {resp.text}"
             )
 
-            return [
-                {
-                    "issue_id": r.issue_id,
-                    "issue_key": r.issue_key,
-                    "project_key": r.project_key,
-                    "assignee_account_id": r.assignee_account_id,
-                    "context": r.context,
-                    "created_at": r.created_at.isoformat() if r.created_at else None,
-                }
-                for r in results
-            ]
+        data = resp.json()
+        issue_key = data.get("key", "")
+        issue_url = f"{self.jira_url}/browse/{issue_key}"
 
-        except Exception as e:
-            logger.error(f"Error searching similar issues: {str(e)}")
-            raise
+        return JiraCreateIssueResponse(
+            issue_key=issue_key,
+            issue_url=issue_url,
+            summary=request.summary,
+            assigned_to=assignee_display_name,
+        )
+
+    def assign_issue(
+        self, issue_key: str, request: JiraAssignIssueRequest
+    ) -> JiraAssignIssueResponse:
+        """Assign or reassign a Jira issue to a user."""
+        client = self.get_jira_client()
+        auth_header = client._session.headers.get("Authorization")
+        if not auth_header:
+            raise ValueError("No Authorization header in session")
+
+        profile = (
+            self.db.query(ResourceProfile)
+            .filter(cast(Any, ResourceProfile.user_id == request.assignee_user_id))
+            .first()
+        )
+        if not profile or not profile.jira_account_id:
+            raise ValueError("User does not have a connected Jira account")
+
+        server = client._options["server"]
+        headers = {
+            "Authorization": auth_header,
+            "Content-Type": "application/json",
+        }
+
+        resp = httpx.put(
+            f"{server}/rest/api/3/issue/{issue_key}/assignee",
+            headers=headers,
+            json={"accountId": profile.jira_account_id},
+            timeout=15,
+        )
+
+        if resp.status_code not in (200, 204):
+            raise ValueError(
+                f"Failed to assign issue: HTTP {resp.status_code} - {resp.text}"
+            )
+
+        return JiraAssignIssueResponse(
+            issue_key=issue_key,
+            assigned_to=profile.jira_display_name,
+        )
 
     def process_webhook_event(
         self, event_type: str, payload: dict[str, Any]
@@ -1404,13 +1323,17 @@ class JiraIntegrationService:
                     matches = self._matches_selected_status(issue_content, status_map)
 
                     if matches and issue_content.context:
-                        created, updated = self._store_issue_embeddings([issue_content])
+                        created, skipped = self._store_issue_embeddings([issue_content])
                         if issue_content.assignee:
                             self._update_resource_profiles_from_vectors([issue_content])
                         self.db.commit()
                         result["processed"] = True
                         result["issue_key"] = issue.key
-                        result["action"] = "created" if created > 0 else "updated"
+                        result["action"] = (
+                            "created"
+                            if created > 0
+                            else ("skipped" if skipped > 0 else "no_match")
+                        )
                     else:
                         deleted = (
                             self.db.query(JiraIssueVector)

@@ -9,6 +9,7 @@ from neomodel import config as neomodel_config
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
+from app.api.tasks.task_scheduler import start_task_scheduler, stop_task_scheduler
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -37,9 +38,12 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # except Exception as e:
     #     logger.warning(f"Could not initialize test profiles: {str(e)}")
 
+    start_task_scheduler()
+
     yield
 
     # Shutdown
+    stop_task_scheduler()
     logger.info("Shutting down...")
 
 
