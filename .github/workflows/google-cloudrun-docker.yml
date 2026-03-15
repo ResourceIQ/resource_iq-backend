@@ -121,7 +121,7 @@ jobs:
         run: |-
           touch .env
 
-          gcloud beta run compose up \
+          gcloud beta run compose up cloudrun.compose.yaml \
             --project "${{ env.PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
             --quiet
