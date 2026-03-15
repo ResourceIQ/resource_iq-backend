@@ -8,6 +8,8 @@ from pydantic import BaseModel
 class TeamMembersCard(BaseModel):
     total: int  # e.g. 6
     new_this_month: int  # e.g. +2
+    developers: int
+    admins: int
 
 
 class TeamUtilizationCard(BaseModel):
