@@ -85,8 +85,8 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           FIRST_SUPERUSER: ${{ secrets.FIRST_SUPERUSER }}
           FIRST_SUPERUSER_PASSWORD: ${{ secrets.FIRST_SUPERUSER_PASSWORD }}
-          FRONTEND_HOST: ${{ secrets.FRONTEND_HOST }}
-          BACKEND_CORS_ORIGINS: ${{ secrets.BACKEND_CORS_ORIGINS }}
+          FRONTEND_HOST: ${{ vars.FRONTEND_HOST }}
+          BACKEND_CORS_ORIGINS: ${{ vars.BACKEND_CORS_ORIGINS }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
@@ -95,19 +95,19 @@ jobs:
           SMTP_SSL: ${{ secrets.SMTP_SSL }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          GITHUB_APP_ID: ${{ secrets.GITHUB_APP_ID }}
-          GITHUB_PRIVATE_KEY: ${{ secrets.GITHUB_PRIVATE_KEY }}
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          GITHUB_APP_SLUG: ${{ secrets.GITHUB_APP_SLUG }}
+          GITHUB_APP_ID: ${{ vars.GH_APP_ID }}
+          GITHUB_PRIVATE_KEY: ${{ secrets.GH_PRIVATE_KEY }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
+          GITHUB_APP_SLUG: ${{ vars.GH_APP_SLUG }}
           JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
-          JINA_API_URL: ${{ secrets.JINA_API_URL }}
-          JINA_EMBEDDING_MODEL1: ${{ secrets.JINA_EMBEDDING_MODEL1 }}
-          JINA_EMBEDDING_MODEL2: ${{ secrets.JINA_EMBEDDING_MODEL2 }}
-          USE_JINA_API: ${{ secrets.USE_JINA_API }}
-          EMBEDDING_DIMENSION: ${{ secrets.EMBEDDING_DIMENSION }}
-          ATLASSIAN_CLIENT_ID: ${{ secrets.ATLASSIAN_CLIENT_ID }}
+          JINA_API_URL: ${{ vars.JINA_API_URL }}
+          JINA_EMBEDDING_MODEL1: ${{ vars.JINA_EMBEDDING_MODEL1 }}
+          JINA_EMBEDDING_MODEL2: ${{ vars.JINA_EMBEDDING_MODEL2 }}
+          USE_JINA_API: ${{ vars.USE_JINA_API }}
+          EMBEDDING_DIMENSION: ${{ vars.EMBEDDING_DIMENSION }}
+          ATLASSIAN_CLIENT_ID: ${{ vars.ATLASSIAN_CLIENT_ID }}
           ATLASSIAN_CLIENT_SECRET: ${{ secrets.ATLASSIAN_CLIENT_SECRET }}
-          ATLASSIAN_REDIRECT_URI: ${{ secrets.ATLASSIAN_REDIRECT_URI }}
+          ATLASSIAN_REDIRECT_URI: ${{ vars.ATLASSIAN_REDIRECT_URI }}
           NEO4J_SCHEME: ${{ secrets.NEO4J_SCHEME }}
           NEO4J_HOST: ${{ secrets.NEO4J_HOST }}
           NEO4J_PORT: ${{ secrets.NEO4J_PORT }}
