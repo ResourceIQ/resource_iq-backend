@@ -1,3 +1,4 @@
+name: resource-iq-be
 services:
   resource-iq:
     image: "${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}"
