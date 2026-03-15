@@ -126,6 +126,12 @@ jobs:
             --region "${{ env.REGION }}" \
             --quiet
 
+          gcloud run services update "${{ env.SERVICE }}" \
+            --project "${{ env.PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --add-cloudsql-instances "${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq" \
+            --quiet
+
       - name: 'Create or Update Migration Job'
         run: |-
           gcloud run jobs deploy resource-iq-prestart \
