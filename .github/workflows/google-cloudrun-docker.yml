@@ -32,7 +32,7 @@ jobs:
            docker run --entrypoint /bin/bash test-build -c "alembic heads" && exit 1)
 
   deploy:
-    #if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request'
     needs: build-test
     runs-on: 'ubuntu-latest'
     permissions:
