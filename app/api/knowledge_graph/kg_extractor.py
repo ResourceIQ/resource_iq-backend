@@ -2,8 +2,8 @@
 Entity extraction from pull-request metadata for knowledge-graph ingestion.
 
 Two layers:
-  1. RegexEntityExtractor  — zero-cost, file-extension + pattern matching
-  2. LLMEntityExtractor    — LLM-backed structured classification (falls back to regex)
+    1. LLMEntityExtractor    — LLM-backed structured classification (primary)
+    2. RegexEntityExtractor  — zero-cost file-extension + pattern fallback
 
 Both satisfy the ``EntityExtractor`` protocol and return ``ExtractedEntities``.
 """
@@ -267,6 +267,9 @@ class LLMEntityExtractor:
     def __init__(self, fallback: EntityExtractor | None = None):
         from app.core.config import settings
 
+        self._model: GenerativeModel | None = None
+        self._fallback = fallback or RegexEntityExtractor()
+
         # Allow local/dev credentials to be supplied via .env without shell setup.
         if settings.GCP_CREDENTIALS_PATH and not os.getenv(
             "GOOGLE_APPLICATION_CREDENTIALS"
@@ -277,15 +280,20 @@ class LLMEntityExtractor:
                 configured_path = repo_root / configured_path
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(configured_path)
 
-        vertexai.init(
-            project=settings.GCP_PROJECT_ID,
-            location=settings.GCP_LOCATION,
-        )
-        self._model = GenerativeModel(
-            model_name="gemini-2.0-flash",
-            system_instruction=_SYSTEM_PROMPT,
-        )
-        self._fallback = fallback or RegexEntityExtractor()
+        try:
+            vertexai.init(
+                project=settings.GCP_PROJECT_ID,
+                location=settings.GCP_LOCATION,
+            )
+            self._model = GenerativeModel(
+                model_name="gemini-2.0-flash",
+                system_instruction=_SYSTEM_PROMPT,
+            )
+        except Exception:
+            logger.warning(
+                "Vertex AI init failed. Falling back to regex extraction.",
+                exc_info=True,
+            )
 
     def extract(
         self,
@@ -295,28 +303,33 @@ class LLMEntityExtractor:
         body: str,
         labels: list[str],
     ) -> ExtractedEntities:
-        # 1. Always run regex first — free, guarantees language detection
-        regex_result = RegexEntityExtractor().extract(
-            files, commit_messages, title, body, labels
-        )
+        if self._model is None:
+            fallback_result = self._fallback.extract(
+                files, commit_messages, title, body, labels
+            )
+            return _validate_against_taxonomy(fallback_result)
 
-        # 2. Call LLM
+        # 1. LLM-first extraction for higher precision.
         try:
             context = _build_pr_context(files, commit_messages, title, body, labels)
             llm_result = self._call_llm(context)
+            return _validate_against_taxonomy(llm_result)
         except json.JSONDecodeError as exc:
             logger.warning("LLM extraction failed (JSON parse): %s", exc)
-            return _validate_against_taxonomy(regex_result)
         except Exception as exc:
             logger.warning("LLM extraction failed (unexpected): %s", exc)
-            return _validate_against_taxonomy(regex_result)
 
-        # 3. Merge LLM result with regex result, then validate
-        merged = llm_result.merge(regex_result)
-        return _validate_against_taxonomy(merged)
+        # 2. Only fall back to regex when LLM extraction fails.
+        fallback_result = self._fallback.extract(
+            files, commit_messages, title, body, labels
+        )
+        return _validate_against_taxonomy(fallback_result)
 
     def _call_llm(self, context: str) -> ExtractedEntities:
         """Call Gemini Flash via Vertex AI with the taxonomy system prompt."""
+        if self._model is None:
+            raise RuntimeError("Vertex AI model is not initialized")
+
         response = self._model.generate_content(
             context,
             generation_config={
