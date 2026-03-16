@@ -18,16 +18,25 @@ class PrScoreInfo(SQLModel):
     match_percentage: float = 0.0
 
 
+class KGMatchInfo(SQLModel):
+    category: str
+    value: str
+    evidence_count: int = 0
+    match_strength: float = 0.0
+
+
 class ScoreProfile(SQLModel):
     user_id: UUID
     user_name: str | None = None
     position: str | None = None
     github_pr_score: float = 0.0
+    knowledge_graph_score: float = 0.0
     jira_issue_score: float = 0.0
-    pr_info: list[PrScoreInfo] = []
-    issue_links: list[str] = []
+    pr_info: list[PrScoreInfo] = Field(default_factory=list)
+    kg_matches: list[KGMatchInfo] = Field(default_factory=list)
+    issue_links: list[str] = Field(default_factory=list)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def total_score(self) -> float:
-        return self.github_pr_score + self.jira_issue_score
+        return self.github_pr_score + self.knowledge_graph_score + self.jira_issue_score

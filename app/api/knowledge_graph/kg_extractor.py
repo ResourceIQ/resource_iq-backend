@@ -35,7 +35,31 @@ from app.api.knowledge_graph.kg_taxonomy import (
     get_full_taxonomy_prompt,
 )
 
+# NOTE: DOMAIN_PATTERNS, SKILL_PATTERNS, FRAMEWORK_PATTERNS, TOOL_PATTERNS are
+# kept imported for RegexEntityExtractor (the unavailability fallback).
+
 logger = logging.getLogger(__name__)
+
+# Languages that are too short or too ambiguous to detect reliably in plain text.
+# They are still detected from file extensions during KG ingestion.
+_TEXT_DETECT_SKIP: frozenset[str] = frozenset(
+    {
+        "C",
+        "R",  # single letters — match almost every sentence
+        "Go",  # extremely common English word
+        "C++",
+        "C#",
+        "F#",  # special chars plus ambiguous base letter
+    }
+)
+
+# Word-boundary patterns for unambiguous language names.
+# NOTE: uses raw-string \b (word boundary), *not* \\w which would be a literal.
+_LANGUAGE_NAME_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(rf"\b{re.escape(language)}\b", re.IGNORECASE), language)
+    for language in LANGUAGE_SLUGS
+    if language not in _TEXT_DETECT_SKIP
+]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data structures
@@ -175,164 +199,6 @@ def _validate_against_taxonomy(entities: ExtractedEntities) -> ExtractedEntities
         return entities
 
 
-def _label_pattern_map(
-    patterns: list[tuple[re.Pattern[str], str]],
-) -> dict[str, re.Pattern[str]]:
-    """Build case-insensitive label->pattern map from taxonomy pattern tuples."""
-    return {label.lower(): pattern for pattern, label in patterns}
-
-
-def _passes_evidence_threshold(
-    candidate: str,
-    llm_values: list[str],
-    regex_values: list[str],
-    label_to_pattern: dict[str, re.Pattern[str]],
-    title: str,
-    labels: list[str],
-    files: list[str],
-    commit_messages: list[str],
-) -> bool:
-    """
-    Keep only high-confidence domain/skill labels.
-
-    Weighted evidence:
-    - Regex hit for the label: +2 (strong deterministic signal)
-    - LLM proposed the label: +1
-    - Pattern hit in title/labels/files/commits: +2/+2/+2/+1
-    """
-    evidence, _ = _score_evidence(
-        candidate=candidate,
-        llm_values=llm_values,
-        regex_values=regex_values,
-        label_to_pattern=label_to_pattern,
-        title=title,
-        labels=labels,
-        files=files,
-        commit_messages=commit_messages,
-    )
-    return evidence >= 2
-
-
-def _score_evidence(
-    candidate: str,
-    llm_values: list[str],
-    regex_values: list[str],
-    label_to_pattern: dict[str, re.Pattern[str]],
-    title: str,
-    labels: list[str],
-    files: list[str],
-    commit_messages: list[str],
-) -> tuple[int, list[str]]:
-    """Return score and evidence reasons for a domain/skill candidate."""
-    key = candidate.lower()
-    evidence = 0
-    reasons: list[str] = []
-
-    if key in _to_lower_set(regex_values):
-        evidence += 2
-        reasons.append("regex_match(+2)")
-    if key in _to_lower_set(llm_values):
-        evidence += 1
-        reasons.append("llm_match(+1)")
-
-    pattern = label_to_pattern.get(key)
-    if pattern is not None:
-        if title and pattern.search(title):
-            evidence += 2
-            reasons.append("title_pattern(+2)")
-        if labels and pattern.search(" ".join(labels)):
-            evidence += 2
-            reasons.append("labels_pattern(+2)")
-        if files and pattern.search("\n".join(files)):
-            evidence += 2
-            reasons.append("files_pattern(+2)")
-        if commit_messages and pattern.search("\n".join(commit_messages)):
-            evidence += 1
-            reasons.append("commits_pattern(+1)")
-
-    return evidence, reasons
-
-
-def _merge_with_evidence_thresholds(
-    llm_entities: ExtractedEntities,
-    regex_entities: ExtractedEntities,
-    files: list[str],
-    commit_messages: list[str],
-    title: str,
-    labels: list[str],
-) -> ExtractedEntities:
-    """
-    Merge LLM + regex extraction while applying stricter quality gates
-    for domain/skill classification.
-    """
-    domain_pattern_map = _label_pattern_map(DOMAIN_PATTERNS)
-    skill_pattern_map = _label_pattern_map(SKILL_PATTERNS)
-
-    merged_domains: list[str] = []
-    for candidate in _merge_lists(llm_entities.domains, regex_entities.domains):
-        evidence_score, evidence_reasons = _score_evidence(
-            candidate=candidate,
-            llm_values=llm_entities.domains,
-            regex_values=regex_entities.domains,
-            label_to_pattern=domain_pattern_map,
-            title=title,
-            labels=labels,
-            files=files,
-            commit_messages=commit_messages,
-        )
-        if evidence_score >= 2:
-            merged_domains.append(candidate)
-            logger.debug(
-                "KG extractor accepted domain '%s' with score=%s reasons=%s",
-                candidate,
-                evidence_score,
-                ", ".join(evidence_reasons) or "none",
-            )
-        else:
-            logger.debug(
-                "KG extractor rejected domain '%s' with score=%s reasons=%s",
-                candidate,
-                evidence_score,
-                ", ".join(evidence_reasons) or "none",
-            )
-
-    merged_skills: list[str] = []
-    for candidate in _merge_lists(llm_entities.skills, regex_entities.skills):
-        evidence_score, evidence_reasons = _score_evidence(
-            candidate=candidate,
-            llm_values=llm_entities.skills,
-            regex_values=regex_entities.skills,
-            label_to_pattern=skill_pattern_map,
-            title=title,
-            labels=labels,
-            files=files,
-            commit_messages=commit_messages,
-        )
-        if evidence_score >= 2:
-            merged_skills.append(candidate)
-            logger.debug(
-                "KG extractor accepted skill '%s' with score=%s reasons=%s",
-                candidate,
-                evidence_score,
-                ", ".join(evidence_reasons) or "none",
-            )
-        else:
-            logger.debug(
-                "KG extractor rejected skill '%s' with score=%s reasons=%s",
-                candidate,
-                evidence_score,
-                ", ".join(evidence_reasons) or "none",
-            )
-
-    return ExtractedEntities(
-        languages=_merge_lists(llm_entities.languages, regex_entities.languages),
-        frameworks=_merge_lists(llm_entities.frameworks, regex_entities.frameworks),
-        domains=merged_domains,
-        skills=merged_skills,
-        tools=_merge_lists(llm_entities.tools, regex_entities.tools),
-    )
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # LLM system prompt  (built once, cached via prompt caching)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -379,8 +245,16 @@ class RegexEntityExtractor:
         labels: list[str],
     ) -> ExtractedEntities:
         combined_text = _build_pr_context(files, commit_messages, title, body, labels)
+        file_languages = self._extract_languages(files)
+        # Only supplement with text detection when no file list is available
+        # (e.g. a plain-text task description in the scorer). During KG build
+        # the file list is always populated and PR descriptions contain natural
+        # English words that produce false positive language nodes (e.g. "C").
+        text_languages = (
+            self._extract_languages_from_text(combined_text) if not files else []
+        )
         return ExtractedEntities(
-            languages=self._extract_languages(files),
+            languages=_merge_lists(file_languages, text_languages),
             frameworks=self._run_patterns(FRAMEWORK_PATTERNS, combined_text),
             domains=self._run_patterns(DOMAIN_PATTERNS, combined_text),
             skills=self._run_patterns(SKILL_PATTERNS, combined_text),
@@ -401,6 +275,19 @@ class RegexEntityExtractor:
             if lang and lang.lower() not in seen:
                 seen.add(lang.lower())
                 result.append(lang)
+        return result
+
+    def _extract_languages_from_text(self, text: str) -> list[str]:
+        """Detect explicit language mentions in plain-English task or PR text."""
+        seen: set[str] = set()
+        result: list[str] = []
+        for pattern, language in _LANGUAGE_NAME_PATTERNS:
+            key = language.lower()
+            if key in seen:
+                continue
+            if pattern.search(text):
+                seen.add(key)
+                result.append(language)
         return result
 
     def _run_patterns(
@@ -470,62 +357,45 @@ class LLMEntityExtractor:
         body: str,
         labels: list[str],
     ) -> ExtractedEntities:
-        # Always run regex extraction to provide deterministic signals.
-        regex_result = self._fallback.extract(
-            files, commit_messages, title, body, labels
-        )
-        logger.debug(
-            "KG extractor regex result for title='%s': %s",
-            (title or "")[:120],
-            regex_result.to_dict(),
-        )
-
-        llm_result = ExtractedEntities()
+        # LLM unavailable (Vertex AI not configured / init failed) → regex last resort.
         if self._model is None:
             logger.info(
-                "KG extractor using regex-only mode (LLM unavailable) for title='%s'",
+                "KG extractor: Vertex AI unavailable, using regex fallback for title='%s'",
                 (title or "")[:120],
             )
-            return _validate_against_taxonomy(regex_result)
+            return _validate_against_taxonomy(
+                self._fallback.extract(files, commit_messages, title, body, labels)
+            )
 
-        # LLM extraction remains primary, but no longer replaces regex entirely.
+        # Primary path: LLM extracts, taxonomy validates. No regex merging.
         try:
             context = _build_pr_context(files, commit_messages, title, body, labels)
             llm_result = self._call_llm(context)
-            logger.debug(
-                "KG extractor LLM result for title='%s': %s",
+            validated = _validate_against_taxonomy(llm_result)
+            logger.info(
+                "KG extractor LLM result for title='%s': languages=%d frameworks=%d domains=%d skills=%d tools=%d",
                 (title or "")[:120],
-                llm_result.to_dict(),
+                len(validated.languages),
+                len(validated.frameworks),
+                len(validated.domains),
+                len(validated.skills),
+                len(validated.tools),
             )
+            logger.debug("KG extractor entities: %s", validated.to_dict())
+            return validated
         except json.JSONDecodeError as exc:
-            logger.warning("LLM extraction failed (JSON parse): %s", exc)
+            logger.warning(
+                "KG extractor LLM JSON parse failed: %s — using regex fallback", exc
+            )
         except Exception as exc:
-            logger.warning("LLM extraction failed (unexpected): %s", exc)
+            logger.warning(
+                "KG extractor LLM call failed: %s — using regex fallback", exc
+            )
 
-        merged = _merge_with_evidence_thresholds(
-            llm_entities=llm_result,
-            regex_entities=regex_result,
-            files=files,
-            commit_messages=commit_messages,
-            title=title,
-            labels=labels,
+        # LLM call failed at runtime → regex as last resort.
+        return _validate_against_taxonomy(
+            self._fallback.extract(files, commit_messages, title, body, labels)
         )
-        validated = _validate_against_taxonomy(merged)
-        logger.info(
-            "KG extractor merged result for title='%s' languages=%d frameworks=%d domains=%d skills=%d tools=%d",
-            (title or "")[:120],
-            len(validated.languages),
-            len(validated.frameworks),
-            len(validated.domains),
-            len(validated.skills),
-            len(validated.tools),
-        )
-        logger.debug(
-            "KG extractor merged entities for title='%s': %s",
-            (title or "")[:120],
-            validated.to_dict(),
-        )
-        return validated
 
     def _call_llm(self, context: str) -> ExtractedEntities:
         """Call Gemini Flash via Vertex AI with the taxonomy system prompt."""

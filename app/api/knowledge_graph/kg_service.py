@@ -1,5 +1,8 @@
 import re
-from typing import Any
+from collections import Counter
+from typing import Any, cast
+
+from neomodel import db
 
 from app.api.integrations.GitHub.github_schema import PullRequestContent
 from app.api.knowledge_graph.kg_extractor import ExtractedEntities
@@ -17,10 +20,22 @@ from app.api.knowledge_graph.kg_model import (
     Skill,
     Tool,
 )
-from app.api.knowledge_graph.kg_schema import JiraIssueContent
+from app.api.knowledge_graph.kg_schema import JiraIssueContent, KGExpertiseSummary
 
 
 class KnowledgeGraphService:
+    @staticmethod
+    def _count_entity_values(values: list[Any]) -> dict[str, int]:
+        counts: Counter[str] = Counter()
+        for value in values:
+            if not isinstance(value, str):
+                continue
+            normalized = value.strip().lower()
+            if not normalized:
+                continue
+            counts[normalized] += 1
+        return dict(counts)
+
     @staticmethod
     def _create_or_update_node(model: Any, properties: dict[str, Any]) -> Any:
         return model.create_or_update(properties)[0]
@@ -62,6 +77,63 @@ class KnowledgeGraphService:
     def pr_has_context(self, pr_id: int) -> bool:
         pr_node = PR.nodes.get(identifier=pr_id)
         return bool((pr_node.context or "").strip())
+
+    def get_resource_expertise_summary(self, github_id: int) -> KGExpertiseSummary:
+        rows, _ = db.cypher_query(
+            """
+            MATCH (r:Resource {github_id: $github_id})
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)<-[:AUTHORED_BY]-(pr:PR)
+                RETURN count(DISTINCT pr) AS pr_count
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)<-[:AUTHORED_BY]-(pr:PR)-[:USES_LANGUAGE]->(node:Language)
+                WITH [value IN collect(node.name) WHERE value IS NOT NULL] AS values
+                RETURN values AS languages
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)<-[:AUTHORED_BY]-(pr:PR)-[:USES_FRAMEWORK]->(node:Framework)
+                WITH [value IN collect(node.name) WHERE value IS NOT NULL] AS values
+                RETURN values AS frameworks
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)<-[:AUTHORED_BY]-(pr:PR)-[:TOUCHES_DOMAIN]->(node:Domain)
+                WITH [value IN collect(node.slug) WHERE value IS NOT NULL] AS values
+                RETURN values AS domains
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)<-[:AUTHORED_BY]-(pr:PR)-[:DEMONSTRATES_SKILL]->(node:Skill)
+                WITH [value IN collect(node.slug) WHERE value IS NOT NULL] AS values
+                RETURN values AS skills
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)<-[:AUTHORED_BY]-(pr:PR)-[:USES_TOOL]->(node:Tool)
+                WITH [value IN collect(node.name) WHERE value IS NOT NULL] AS values
+                RETURN values AS tools
+            }
+            RETURN pr_count, languages, frameworks, domains, skills, tools
+            """,
+            {"github_id": github_id},
+        )
+
+        if not rows:
+            return KGExpertiseSummary()
+
+        row = cast(list[Any], rows[0])
+        return KGExpertiseSummary(
+            pr_count=int(row[0] or 0),
+            languages=self._count_entity_values(cast(list[Any], row[1] or [])),
+            frameworks=self._count_entity_values(cast(list[Any], row[2] or [])),
+            domains=self._count_entity_values(cast(list[Any], row[3] or [])),
+            skills=self._count_entity_values(cast(list[Any], row[4] or [])),
+            tools=self._count_entity_values(cast(list[Any], row[5] or [])),
+        )
 
     def upsert_pr(self, pr: PullRequestContent, repo_name: str) -> None:
         # 1. Upsert PR node (create_or_update returns a list, so we grab the first element)
