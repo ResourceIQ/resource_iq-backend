@@ -14,6 +14,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraAuthConnectResponse,
     JiraCreateIssueRequest,
     JiraCreateIssueResponse,
+    JiraIssueDetailResponse,
     JiraIssueTypeStatusResponse,
     JiraIssueTypeStatusUpdateRequest,
     JiraSyncRequest,
@@ -216,6 +217,23 @@ async def get_issue_types(session: SessionDep) -> list[dict[str, Any]]:
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch issue types: {str(e)}"
+        )
+
+
+@router.get("/issues/{issue_key}", response_model=JiraIssueDetailResponse)
+async def get_issue(
+    session: SessionDep,
+    issue_key: str,
+) -> JiraIssueDetailResponse:
+    """Fetch a single Jira issue by its key."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_issue(issue_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch issue: {str(e)}"
         )
 
 

@@ -153,6 +153,18 @@ class JiraAssignIssueRequest(BaseModel):
     )
 
 
+class JiraIssueDetailResponse(BaseModel):
+    """Response for fetching a single Jira issue's details."""
+
+    issue_key: str
+    issue_url: str
+    summary: str
+    description: str | None = None
+    assigned_to: str | None = None
+    status: str
+    issue_type: str
+
+
 class JiraAssignIssueResponse(BaseModel):
     """Response after assigning a Jira issue."""
 
