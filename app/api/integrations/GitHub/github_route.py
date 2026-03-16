@@ -256,6 +256,19 @@ async def get_repositories(session: SessionDep) -> list[GitHubRepository]:
         )
 
 
+@router.get("/org/repos/live", response_model=list[GitHubRepository])
+async def get_live_repositories(session: SessionDep) -> list[GitHubRepository]:
+    """Get all repositories with live stats (branch and PR counts)."""
+    try:
+        service = GithubIntegrationService(session)
+        return service.get_live_repositories()
+    except Exception as e:
+        logger.error("Failed to fetch live repositories: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch live repositories: {str(e)}"
+        )
+
+
 @router.get("/repositories/{repo_name}/contributors")
 async def get_repo_contributors(
     session: SessionDep,

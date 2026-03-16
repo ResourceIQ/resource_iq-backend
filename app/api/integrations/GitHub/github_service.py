@@ -103,6 +103,50 @@ class GithubIntegrationService:
                 )
             )
 
+    def get_live_repositories(self) -> list[GitHubRepository]:
+        """Get all repositories with live stats like branch and PR counts."""
+        gh = self.get_github_client()
+        org = gh.get_organization(self.organization_name)
+        repos: list[GitHubRepository] = []
+
+        for r in org.get_repos():
+            # Get branch count
+            try:
+                branches = r.get_branches()
+                branch_count = branches.totalCount
+            except Exception as e:
+                logger.warning(f"Failed to get branches for {r.name}: {e}")
+                branch_count = 0
+
+            # Get pull request count (legacy + active)
+            try:
+                pulls = r.get_pulls(state="all")
+                pull_request_count = pulls.totalCount
+            except Exception as e:
+                logger.warning(f"Failed to get pull requests for {r.name}: {e}")
+                pull_request_count = 0
+
+            repos.append(
+                GitHubRepository(
+                    id=r.id,
+                    name=r.name,
+                    full_name=r.full_name,
+                    private=r.private,
+                    html_url=HttpUrl(r.html_url),
+                    description=r.description,
+                    default_branch=r.default_branch or "main",
+                    language=r.language,
+                    stargazers_count=r.stargazers_count or 0,
+                    forks_count=r.forks_count or 0,
+                    open_issues_count=r.open_issues_count or 0,
+                    branch_count=branch_count,
+                    pull_request_count=pull_request_count,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                    pushed_at=r.pushed_at,
+                )
+            )
+
         return repos
 
     def get_repo_contributors(self, repo_name: str) -> list[dict[str, Any]]:

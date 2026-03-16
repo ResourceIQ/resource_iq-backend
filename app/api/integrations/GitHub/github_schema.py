@@ -68,6 +68,8 @@ class GitHubRepository(BaseModel):
     stargazers_count: int = 0
     forks_count: int = 0
     open_issues_count: int = 0
+    branch_count: int = 0
+    pull_request_count: int = 0
     created_at: datetime | None = None
     updated_at: datetime | None = None
     pushed_at: datetime | None = None
