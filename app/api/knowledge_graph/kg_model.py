@@ -8,6 +8,7 @@ from neomodel import (
     StringProperty,
     StructuredNode,
     StructuredRel,
+    TextProperty,
 )
 
 
@@ -75,6 +76,7 @@ class PR(StructuredNode):
     identifier = IntegerProperty(unique_index=True, required=True)
     number = IntegerProperty()
     title = StringProperty()
+    context = TextProperty()
     url = StringProperty()
     author_login = StringProperty()
     repo = StringProperty()
