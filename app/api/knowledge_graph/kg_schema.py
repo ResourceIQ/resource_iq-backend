@@ -8,6 +8,29 @@ class KGBuildResult(TypedDict):
     errors: list[str]
 
 
+@dataclass(frozen=True)
+class KGResourceSnapshot:
+    id: int | None
+    github_id: int | None
+    github_login: str | None
+
+
+@dataclass(frozen=True)
+class KGPRSnapshot:
+    pr_id: int | str | None
+    id: int | None
+    pr_number: int
+    pr_title: str
+    pr_description: str | None
+    pr_url: str
+    repo_id: int
+    repo_name: str
+    metadata_json: dict[str, object] | None
+    author_login: str
+    author_id: int
+    context: str | None
+
+
 @dataclass
 class KGExpertiseSummary:
     pr_count: int = 0

@@ -77,6 +77,18 @@ class GithubIntegrationService:
             raise Exception("GitHub integration credentials not found in database")
         return self.credentials.github_install_id
 
+    @staticmethod
+    def _should_skip_default_branch_sync_pr(pr: PullRequest) -> bool:
+        """Skip branch-sync PRs where default branch is opened into another branch."""
+        default_branch = (pr.base.repo.default_branch or "").strip()
+        base_branch = (pr.base.ref or "").strip()
+        head_branch = (pr.head.ref or "").strip()
+
+        if not default_branch:
+            return False
+
+        return head_branch == default_branch and base_branch != default_branch
+
     # ── Repository Methods ───────────────────────────────────────
 
     def get_repositories(self) -> list[GitHubRepository]:
@@ -332,6 +344,17 @@ class GithubIntegrationService:
                     for pr in repo.get_pulls(
                         state=state, sort="updated", direction="desc"
                     ):
+                        if self._should_skip_default_branch_sync_pr(pr):
+                            logger.debug(
+                                "Skipping branch-sync PR #%s in %s: %s -> %s (default=%s)",
+                                pr.number,
+                                repo_name,
+                                pr.head.ref,
+                                pr.base.ref,
+                                pr.base.repo.default_branch,
+                            )
+                            continue
+
                         if count >= max_prs_per_repo:
                             break
                         try:
@@ -462,6 +485,9 @@ class GithubIntegrationService:
                 )
 
                 for pr in repo_prs:
+                    if self._should_skip_default_branch_sync_pr(pr):
+                        continue
+
                     if not pr.user:
                         continue
 
@@ -492,6 +518,9 @@ class GithubIntegrationService:
                     state="closed", sort="updated", direction="desc"
                 )
                 for pr in repo_prs:
+                    if self._should_skip_default_branch_sync_pr(pr):
+                        continue
+
                     if pr.user:
                         author_login = pr.user.login
                         if author_login not in authors_prs:
@@ -543,6 +572,9 @@ class GithubIntegrationService:
                 repo_has_eligible_prs = False
 
                 for pr in repo_prs:
+                    if self._should_skip_default_branch_sync_pr(pr):
+                        continue
+
                     if not pr.user:
                         continue
 
