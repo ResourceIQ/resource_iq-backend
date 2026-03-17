@@ -37,6 +37,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraIssueTypeStatusResponse,
     JiraLiveStatsResponse,
     JiraProjectStats,
+    JiraAssigneeStats,
     JiraSyncResponse,
     JiraUser,
 )
