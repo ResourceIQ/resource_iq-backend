@@ -1,10 +1,9 @@
 name: Test Backend
-# This workflow is temporarily disabled
-# To enable, remove the 'if: false' condition
 
 on:
   push:
     branches:
+      - main
       - master
   pull_request:
     types:
@@ -12,56 +11,96 @@ on:
       - synchronize
 
 jobs:
-  test-backend:
-    if: false  # Disabled temporarily
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: changethis
-          POSTGRES_DB: app
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
       PROJECT_NAME: ResourceIQ Test
-      POSTGRES_SERVER: localhost
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: app
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: changethis
       SECRET_KEY: test-secret-key-for-ci
       FIRST_SUPERUSER: admin@example.com
       FIRST_SUPERUSER_PASSWORD: changethis
-      BACKEND_CORS_ORIGINS: '["http://localhost"]'
+      POSTGRES_SERVER: localhost
       ENVIRONMENT: local
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.10"
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
           version: "0.6.0"
           enable-cache: true
-      - name: Migrate DB
-        run: uv run bash scripts/prestart.sh
-      - name: Run tests
-        run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
-      - name: Store coverage files
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run unit tests
+        run: uv run pytest tests/services/ -v --tb=short --confcutdir=tests/services --cov=app.api --cov-report=term-missing --cov-report=html
+
+      - name: Upload coverage report
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: coverage-html
+          name: unit-test-coverage
           path: htmlcov
           include-hidden-files: true
-      - name: Coverage report
-        run: uv run coverage report --fail-under=90
+
+  # integration-tests:
+  #   name: Integration Tests
+  #   if: false  # Enable when integration tests are ready
+  #   runs-on: ubuntu-latest
+  #   services:
+  #     postgres:
+  #       image: postgres:16
+  #       env:
+  #         POSTGRES_USER: postgres
+  #         POSTGRES_PASSWORD: changethis
+  #         POSTGRES_DB: app
+  #       ports:
+  #         - 5432:5432
+  #       options: >-
+  #         --health-cmd pg_isready
+  #         --health-interval 10s
+  #         --health-timeout 5s
+  #         --health-retries 5
+  #   env:
+  #     PROJECT_NAME: ResourceIQ Test
+  #     POSTGRES_SERVER: localhost
+  #     POSTGRES_PORT: 5432
+  #     POSTGRES_DB: app
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: changethis
+  #     SECRET_KEY: test-secret-key-for-ci
+  #     FIRST_SUPERUSER: admin@example.com
+  #     FIRST_SUPERUSER_PASSWORD: changethis
+  #     BACKEND_CORS_ORIGINS: '["http://localhost"]'
+  #     ENVIRONMENT: local
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v6
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v6
+  #       with:
+  #         python-version: "3.10"
+  #     - name: Install uv
+  #       uses: astral-sh/setup-uv@v7
+  #       with:
+  #         version: "0.6.0"
+  #         enable-cache: true
+  #     - name: Migrate DB
+  #       run: uv run bash scripts/prestart.sh
+  #     - name: Run tests
+  #       run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+  #     - name: Store coverage files
+  #       uses: actions/upload-artifact@v7
+  #       with:
+  #         name: coverage-html
+  #         path: htmlcov
+  #         include-hidden-files: true
+  #     - name: Coverage report
+  #       run: uv run coverage report --fail-under=90
