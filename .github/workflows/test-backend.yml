@@ -15,9 +15,11 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     env:
+      PROJECT_NAME: ResourceIQ Test
       SECRET_KEY: test-secret-key-for-ci
       FIRST_SUPERUSER: admin@example.com
       FIRST_SUPERUSER_PASSWORD: changethis
+      POSTGRES_SERVER: localhost
       ENVIRONMENT: local
     steps:
       - name: Checkout
