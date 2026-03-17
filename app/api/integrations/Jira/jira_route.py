@@ -17,6 +17,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraIssueDetailResponse,
     JiraIssueTypeStatusResponse,
     JiraIssueTypeStatusUpdateRequest,
+    JiraLiveStatsResponse,
     JiraSyncRequest,
     JiraSyncResponse,
 )
@@ -294,3 +295,20 @@ async def sync_issues(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+@router.get("/live/stats", response_model=JiraLiveStatsResponse)
+async def get_jira_live_stats(
+    session: SessionDep,
+    project_keys: list[str] | None = Query(
+        default=None, description="Optional project keys to filter stats"
+    ),
+) -> JiraLiveStatsResponse:
+    """Fetch real-time task statistics directly from Jira across projects."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_live_task_stats(project_keys=project_keys)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch live Jira stats: {str(e)}"
+        )
