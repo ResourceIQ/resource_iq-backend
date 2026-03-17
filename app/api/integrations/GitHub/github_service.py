@@ -3,9 +3,10 @@
 import logging
 import re
 import time
+from datetime import datetime, timedelta
 from typing import Any
 
-from github import Auth, Github
+from github import Auth, Github, GithubException
 from github.PullRequest import PullRequest
 from pydantic import HttpUrl
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.api.embedding.embedding_service import VectorEmbeddingService
 from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
 from app.api.integrations.GitHub.github_schema import (
+    GitHubContributor,
     GitHubRepository,
     GitHubSyncResponse,
     GitHubUser,
@@ -100,6 +102,139 @@ class GithubIntegrationService:
                     created_at=r.created_at,
                     updated_at=r.updated_at,
                     pushed_at=r.pushed_at,
+                )
+            )
+        return repos
+
+    def get_live_repositories(self) -> list[GitHubRepository]:
+        """Get all repositories with live stats like branch and PR counts."""
+        gh = self.get_github_client()
+        org = gh.get_organization(self.organization_name)
+        repos: list[GitHubRepository] = []
+
+        for r in org.get_repos():
+            # Get branch count
+            try:
+                branches = r.get_branches()
+                branch_count = branches.totalCount
+            except Exception as e:
+                logger.warning(f"Failed to get branches for {r.name}: {e}")
+                branch_count = 0
+
+            # Get detailed pull request counts and stale PRs
+            try:
+                all_pulls = list(r.get_pulls(state="open"))
+                open_pr_count = len(all_pulls)
+                pull_request_count = r.get_pulls(state="all").totalCount
+                closed_pr_count = r.get_pulls(state="closed").totalCount
+
+                # Calculate stale PRs (not updated in > 3 days)
+                three_days_ago = datetime.utcnow() - timedelta(days=3)
+                stale_pr_count = sum(
+                    1 for pr in all_pulls if pr.updated_at < three_days_ago
+                )
+
+                # Use search for merged PRs as it's more accurate than iterating
+                merged_pr_count = gh.search_issues(
+                    f"type:pr is:merged repo:{r.full_name}"
+                ).totalCount
+            except Exception as e:
+                logger.warning(f"Failed to get PR stats for {r.name}: {e}")
+                open_pr_count = closed_pr_count = merged_pr_count = stale_pr_count = 0
+
+            # Calculate real issues (total open issues includes PRs in GitHub API)
+            try:
+                real_issue_count = max(0, r.open_issues_count - open_pr_count)
+            except Exception as e:
+                logger.warning(f"Failed to calculate real issues for {r.name}: {e}")
+                real_issue_count = r.open_issues_count
+
+            # Get top contributors (limit to 10 for performance)
+            repo_contributors = []
+            try:
+                # Use a small number to avoid hitting rate limits on contributors
+                # Iterating with enumerate is safer than slicing on potentially empty/uninitialized repos
+                for i, c in enumerate(r.get_contributors()):
+                    if i >= 10:
+                        break
+                    repo_contributors.append(
+                        GitHubContributor(
+                            login=c.login,
+                            id=c.id,
+                            avatar_url=HttpUrl(c.avatar_url) if c.avatar_url else None,
+                            contributions=c.contributions,
+                        )
+                    )
+            except GithubException as e:
+                # 404/409 means no contributors/empty repo, not a real error
+                if e.status not in [404, 409]:
+                    logger.warning(f"Failed to get contributors for {r.name}: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to get contributors for {r.name}: {e}")
+
+            # Get latest workflow status
+            latest_workflow_status = None
+            try:
+                # Using an iterator is safer than [0] on some PaginatedLists
+                latest_run = next(iter(r.get_workflow_runs()), None)
+                if latest_run:
+                    latest_workflow_status = (
+                        latest_run.conclusion or latest_run.status
+                    )  # success, failure, or in_progress
+            except GithubException as e:
+                # 403 means Actions not accessible, 404/409 means none/empty
+                if e.status not in [403, 404, 409]:
+                    logger.warning(f"Failed to get workflow status for {r.name}: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to get workflow status for {r.name}: {e}")
+
+            # Get languages
+            languages = {}
+            try:
+                languages = r.get_languages()
+            except Exception as e:
+                logger.warning(f"Failed to get languages for {r.name}: {e}")
+
+            # Get last commit timestamp
+            last_commit_at = None
+            try:
+                latest_commit = next(iter(r.get_commits()), None)
+                if latest_commit:
+                    last_commit_at = latest_commit.commit.author.date
+            except GithubException as e:
+                # 409 means empty repository, 404 not found
+                if e.status not in [404, 409]:
+                    logger.warning(f"Failed to get last commit for {r.name}: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to get last commit for {r.name}: {e}")
+
+            repos.append(
+                GitHubRepository(
+                    id=r.id,
+                    name=r.name,
+                    full_name=r.full_name,
+                    private=r.private,
+                    html_url=HttpUrl(r.html_url),
+                    description=r.description,
+                    default_branch=r.default_branch or "main",
+                    language=r.language,
+                    stargazers_count=r.stargazers_count or 0,
+                    forks_count=r.forks_count or 0,
+                    open_issues_count=r.open_issues_count or 0,
+                    real_issue_count=real_issue_count,
+                    branch_count=branch_count,
+                    pull_request_count=pull_request_count,
+                    open_pr_count=open_pr_count,
+                    closed_pr_count=closed_pr_count,
+                    merged_pr_count=merged_pr_count,
+                    stale_pr_count=stale_pr_count,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                    pushed_at=r.pushed_at,
+                    last_commit_at=last_commit_at,
+                    latest_workflow_status=latest_workflow_status,
+                    languages=languages,
+                    contributors=repo_contributors,
                 )
             )
 

@@ -24,6 +24,7 @@ from app.api.integrations.Jira.jira_model import (
     JiraOrgIntegration,
 )
 from app.api.integrations.Jira.jira_schema import (
+    JiraAssigneeStats,
     JiraAssignIssueRequest,
     JiraAssignIssueResponse,
     JiraAuthCallbackResponse,
@@ -34,6 +35,8 @@ from app.api.integrations.Jira.jira_schema import (
     JiraIssueContent,
     JiraIssueDetailResponse,
     JiraIssueTypeStatusResponse,
+    JiraLiveStatsResponse,
+    JiraProjectStats,
     JiraSyncResponse,
     JiraUser,
 )
@@ -821,6 +824,113 @@ class JiraIntegrationService:
         issue_content.context = self._generate_issue_context(issue_content)
 
         return issue_content
+
+    def get_live_task_stats(
+        self, project_keys: list[str] | None = None
+    ) -> JiraLiveStatsResponse:
+        """Fetch real-time task statistics from Jira across projects."""
+        client = self.get_jira_client()
+
+        # Build JQL to fetch all non-completed tasks
+        jql = "statusCategory != Done"
+        if project_keys:
+            keys_str = ", ".join([f'"{k}"' for k in project_keys])
+            jql += f" AND project IN ({keys_str})"
+
+        # Optimization: Fetch only essential metadata fields
+        fields = ["project", "status", "priority", "assignee"]
+
+        # Handle Jira API pagination
+        all_issues: list[Issue] = []
+        batch_size = 100
+        start_at = 0
+
+        while True:
+            issues = client.search_issues(
+                jql, startAt=start_at, maxResults=batch_size, fields=fields
+            )
+            all_issues.extend(issues)
+            if len(issues) < batch_size:
+                break
+            start_at += batch_size
+
+            # Safety limit to avoid blocking on massive instances
+            if start_at >= 1000:
+                logger.warning("Reached 1000 issue limit for live stats; truncating.")
+                break
+
+        # Aggregate data in-memory
+        total_active_tasks = len(all_issues)
+        unassigned_tasks = 0
+        project_map: dict[str, dict[str, Any]] = {}  # key -> {name, count}
+        status_counts: dict[str, int] = {}
+        priority_counts: dict[str, int] = {}
+        assignee_map: dict[
+            str, dict[str, Any]
+        ] = {}  # account_id -> {display_name, avatar, count}
+
+        for issue in all_issues:
+            f = issue.fields
+
+            # Project aggregation
+            p_key = f.project.key
+            if p_key not in project_map:
+                project_map[p_key] = {"name": f.project.name, "count": 0}
+            project_map[p_key]["count"] += 1
+
+            # Status aggregation
+            status = f.status.name
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+            # Priority aggregation
+            priority = getattr(f.priority, "name", "None") if f.priority else "None"
+            priority_counts[priority] = priority_counts.get(priority, 0) + 1
+
+            # Assignee aggregation
+            if not f.assignee:
+                unassigned_tasks += 1
+            else:
+                acc_id = f.assignee.accountId
+                if acc_id not in assignee_map:
+                    avatar = None
+                    if hasattr(f.assignee, "avatarUrls"):
+                        avatar = getattr(f.assignee.avatarUrls, "48x48", None)
+                    assignee_map[acc_id] = {
+                        "account_id": acc_id,
+                        "display_name": f.assignee.displayName,
+                        "avatar_url": avatar,
+                        "task_count": 0,
+                    }
+                assignee_map[acc_id]["task_count"] += 1
+
+        # Format project stats
+        tasks_by_project = [
+            JiraProjectStats(key=k, name=v["name"], task_count=v["count"])
+            for k, v in sorted(project_map.items(), key=lambda x: -x[1]["count"])
+        ]
+
+        # Format top assignees (top 10)
+        top_assignee_data = sorted(
+            assignee_map.values(), key=lambda x: -x["task_count"]
+        )[:10]
+        top_assignees = [
+            JiraAssigneeStats(
+                account_id=a["account_id"],
+                display_name=a["display_name"],
+                avatar_url=HttpUrl(a["avatar_url"]) if a["avatar_url"] else None,
+                task_count=a["task_count"],
+            )
+            for a in top_assignee_data
+        ]
+
+        return JiraLiveStatsResponse(
+            total_active_tasks=total_active_tasks,
+            unassigned_tasks=unassigned_tasks,
+            tasks_by_project=tasks_by_project,
+            tasks_by_status=status_counts,
+            tasks_by_priority=priority_counts,
+            top_assignees=top_assignees,
+        )
 
     def _generate_issue_context(self, issue: JiraIssueContent) -> str:
         """

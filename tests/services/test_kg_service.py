@@ -88,6 +88,12 @@ class TestUpsertPr:
             pr_node, author_node, component_node, file_node, label_node
         ]
 
+        # Ensure relationships don't think they are already connected
+        pr_node.author.is_connected.return_value = False
+        pr_node.repo_component.is_connected.return_value = False
+        pr_node.modified_files.is_connected.return_value = False
+        pr_node.pr_labels.is_connected.return_value = False
+
         pr = MagicMock()
         pr.id = 100
         pr.number = 1
@@ -120,6 +126,11 @@ class TestUpsertPr:
             pr_node, author_node, component_node, label_node
         ]
 
+        # Ensure relationships don't think they are already connected
+        pr_node.author.is_connected.return_value = False
+        pr_node.repo_component.is_connected.return_value = False
+        pr_node.pr_labels.is_connected.return_value = False
+
         pr = MagicMock()
         pr.id = 200
         pr.number = 2
@@ -150,6 +161,10 @@ class TestUpsertJiraIssue:
         epic_node = MagicMock()
         comp_node = MagicMock()
         mock_upsert.side_effect = [issue_node, epic_node, comp_node]
+
+        # Ensure relationships don't think they are already connected
+        issue_node.epic.is_connected.return_value = False
+        issue_node.components.is_connected.return_value = False
 
         issue = {
             "key": "PROJ-1",
@@ -207,6 +222,9 @@ class TestLinkPrToJira:
         mock_pr_cls.nodes.get.return_value = pr_node
         mock_issue_cls.nodes.get.return_value = issue_node
 
+        # Ensure relationships don't think they are already connected
+        pr_node.resolves.is_connected.return_value = False
+
         service.link_pr_to_jira(pr_id=100, issue_key="PROJ-1")
 
         mock_pr_cls.nodes.get.assert_called_once_with(identifier=100)
@@ -226,6 +244,9 @@ class TestAddSimilarPrEdges:
         pr_a = MagicMock()
         pr_b = MagicMock()
         mock_pr_cls.nodes.get.side_effect = [pr_a, pr_b]
+
+        # Ensure relationships don't think they are already connected
+        pr_a.similar_to.is_connected.return_value = False
 
         service.add_similar_pr_edges([(1, 2, 0.95)])
 
@@ -250,6 +271,13 @@ class TestUpsertPrEntities:
 
         entity_node = MagicMock()
         mock_upsert.return_value = entity_node
+
+        # Ensure relationships don't think they are already connected
+        pr_node.uses_language.is_connected.return_value = False
+        pr_node.uses_framework.is_connected.return_value = False
+        pr_node.touches_domain.is_connected.return_value = False
+        pr_node.demonstrates_skill.is_connected.return_value = False
+        pr_node.uses_tool.is_connected.return_value = False
 
         entities = MagicMock()
         entities.is_empty.return_value = False
