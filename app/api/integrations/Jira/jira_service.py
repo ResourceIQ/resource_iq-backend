@@ -37,7 +37,6 @@ from app.api.integrations.Jira.jira_schema import (
     JiraIssueTypeStatusResponse,
     JiraLiveStatsResponse,
     JiraProjectStats,
-    JiraAssigneeStats,
     JiraSyncResponse,
     JiraUser,
 )
@@ -1345,9 +1344,7 @@ class JiraIntegrationService:
             plain_description = description_field
 
         assignee_field = fields.get("assignee")
-        assigned_to = (
-            assignee_field.get("displayName") if assignee_field else None
-        )
+        assigned_to = assignee_field.get("displayName") if assignee_field else None
 
         return JiraIssueDetailResponse(
             issue_key=data["key"],
