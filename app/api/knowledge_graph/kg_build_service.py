@@ -30,13 +30,25 @@ class KGBuildService:
             "profiles_updated": 0,
             "errors": [],
         }
+        skipped_prs = 0
 
         resource_statement = select(ResourceProfile)
         resources = self.session.exec(resource_statement).all()
+        logger.info(
+            "KG build started: resources=%d author_filter=%s batch_size=%d",
+            len(resources),
+            author_login,
+            batch_size,
+        )
 
-        for resource in resources:
+        for resource_idx, resource in enumerate(resources, start=1):
             try:
                 if resource.github_id is None:
+                    logger.debug(
+                        "KG build skipping resource #%d (profile_id=%s) without github_id",
+                        resource_idx,
+                        resource.id,
+                    )
                     continue
 
                 pr_statement = select(GitHubPRVector).where(
@@ -48,11 +60,29 @@ class KGBuildService:
                     )
 
                 prs = self.session.exec(pr_statement).all()[:batch_size]
-                for pr in prs:
+                logger.info(
+                    "KG build processing resource #%d login=%s github_id=%s prs=%d",
+                    resource_idx,
+                    resource.github_login,
+                    resource.github_id,
+                    len(prs),
+                )
+
+                for pr_idx, pr in enumerate(prs, start=1):
                     try:
                         pr_identifier = int(pr.pr_id)
                     except (TypeError, ValueError):
                         pr_identifier = pr.id or pr.pr_number
+
+                    logger.debug(
+                        "KG build processing PR %d/%d for resource=%s pr_id=%s pr_number=%s repo=%s",
+                        pr_idx,
+                        len(prs),
+                        resource.github_login,
+                        pr_identifier,
+                        pr.pr_number,
+                        pr.repo_name,
+                    )
 
                     # Upsert PR and related nodes/relationships in the KG
                     self.kg_service.upsert_pr(
@@ -72,10 +102,25 @@ class KGBuildService:
                                 login=pr.author_login,
                                 id=pr.author_id,
                             ),
-                            context="",
+                            context=pr.context,
                         ),
                         repo_name=pr.repo_name,
                     )
+
+                    if (
+                        self.kg_service.pr_exists(pr_identifier)
+                        and self.kg_service.pr_has_entity_links(pr_identifier)
+                        and self.kg_service.pr_has_context(pr_identifier)
+                    ):
+                        skipped_prs += 1
+                        logger.debug(
+                            "KG build skipping already-ingested PR %d/%d for resource=%s pr_id=%s",
+                            pr_idx,
+                            len(prs),
+                            resource.github_login,
+                            pr_identifier,
+                        )
+                        continue
 
                     # ── Extract entities ─────────────────────────────────
                     meta = pr.metadata_json or {}
@@ -94,13 +139,36 @@ class KGBuildService:
                         entities=entities,
                     )
 
+                    logger.debug(
+                        "KG build upserted entities for pr_id=%s languages=%d frameworks=%d domains=%d skills=%d tools=%d",
+                        pr_identifier,
+                        len(entities.languages),
+                        len(entities.frameworks),
+                        len(entities.domains),
+                        len(entities.skills),
+                        len(entities.tools),
+                    )
+
                     results["prs_processed"] += 1
 
                 results["profiles_updated"] += 1
+                logger.info(
+                    "KG build completed resource login=%s processed_prs=%d cumulative_prs=%d",
+                    resource.github_login,
+                    len(prs),
+                    results["prs_processed"],
+                )
             except Exception as exc:
                 resource_identifier = resource.github_login or str(resource.github_id)
                 error_msg = f"Error processing resource {resource_identifier}: {exc}"
                 logger.error(error_msg)
                 results["errors"].append(error_msg)
 
+        logger.info(
+            "KG build finished: prs_processed=%d prs_skipped=%d profiles_updated=%d errors=%d",
+            results["prs_processed"],
+            skipped_prs,
+            results["profiles_updated"],
+            len(results["errors"]),
+        )
         return results

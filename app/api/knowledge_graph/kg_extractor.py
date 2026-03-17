@@ -35,7 +35,31 @@ from app.api.knowledge_graph.kg_taxonomy import (
     get_full_taxonomy_prompt,
 )
 
+# NOTE: DOMAIN_PATTERNS, SKILL_PATTERNS, FRAMEWORK_PATTERNS, TOOL_PATTERNS are
+# kept imported for RegexEntityExtractor (the unavailability fallback).
+
 logger = logging.getLogger(__name__)
+
+# Languages that are too short or too ambiguous to detect reliably in plain text.
+# They are still detected from file extensions during KG ingestion.
+_TEXT_DETECT_SKIP: frozenset[str] = frozenset(
+    {
+        "C",
+        "R",  # single letters — match almost every sentence
+        "Go",  # extremely common English word
+        "C++",
+        "C#",
+        "F#",  # special chars plus ambiguous base letter
+    }
+)
+
+# Word-boundary patterns for unambiguous language names.
+# NOTE: uses raw-string \b (word boundary), *not* \\w which would be a literal.
+_LANGUAGE_NAME_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(rf"\b{re.escape(language)}\b", re.IGNORECASE), language)
+    for language in LANGUAGE_SLUGS
+    if language not in _TEXT_DETECT_SKIP
+]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data structures
@@ -106,6 +130,15 @@ def _dedup(items: list[str]) -> list[str]:
             seen.add(key)
             result.append(item)
     return result
+
+
+def _to_lower_set(items: list[str]) -> set[str]:
+    return {item.lower() for item in items}
+
+
+def _merge_lists(primary: list[str], secondary: list[str]) -> list[str]:
+    """Merge two lists preserving first-seen order, case-insensitive dedup."""
+    return _dedup(primary + secondary)
 
 
 def _as_list(value: Any) -> list[str]:
@@ -212,8 +245,16 @@ class RegexEntityExtractor:
         labels: list[str],
     ) -> ExtractedEntities:
         combined_text = _build_pr_context(files, commit_messages, title, body, labels)
+        file_languages = self._extract_languages(files)
+        # Only supplement with text detection when no file list is available
+        # (e.g. a plain-text task description in the scorer). During KG build
+        # the file list is always populated and PR descriptions contain natural
+        # English words that produce false positive language nodes (e.g. "C").
+        text_languages = (
+            self._extract_languages_from_text(combined_text) if not files else []
+        )
         return ExtractedEntities(
-            languages=self._extract_languages(files),
+            languages=_merge_lists(file_languages, text_languages),
             frameworks=self._run_patterns(FRAMEWORK_PATTERNS, combined_text),
             domains=self._run_patterns(DOMAIN_PATTERNS, combined_text),
             skills=self._run_patterns(SKILL_PATTERNS, combined_text),
@@ -234,6 +275,19 @@ class RegexEntityExtractor:
             if lang and lang.lower() not in seen:
                 seen.add(lang.lower())
                 result.append(lang)
+        return result
+
+    def _extract_languages_from_text(self, text: str) -> list[str]:
+        """Detect explicit language mentions in plain-English task or PR text."""
+        seen: set[str] = set()
+        result: list[str] = []
+        for pattern, language in _LANGUAGE_NAME_PATTERNS:
+            key = language.lower()
+            if key in seen:
+                continue
+            if pattern.search(text):
+                seen.add(key)
+                result.append(language)
         return result
 
     def _run_patterns(
@@ -303,27 +357,45 @@ class LLMEntityExtractor:
         body: str,
         labels: list[str],
     ) -> ExtractedEntities:
+        # LLM unavailable (Vertex AI not configured / init failed) → regex last resort.
         if self._model is None:
-            fallback_result = self._fallback.extract(
-                files, commit_messages, title, body, labels
+            logger.info(
+                "KG extractor: Vertex AI unavailable, using regex fallback for title='%s'",
+                (title or "")[:120],
             )
-            return _validate_against_taxonomy(fallback_result)
+            return _validate_against_taxonomy(
+                self._fallback.extract(files, commit_messages, title, body, labels)
+            )
 
-        # 1. LLM-first extraction for higher precision.
+        # Primary path: LLM extracts, taxonomy validates. No regex merging.
         try:
             context = _build_pr_context(files, commit_messages, title, body, labels)
             llm_result = self._call_llm(context)
-            return _validate_against_taxonomy(llm_result)
+            validated = _validate_against_taxonomy(llm_result)
+            logger.info(
+                "KG extractor LLM result for title='%s': languages=%d frameworks=%d domains=%d skills=%d tools=%d",
+                (title or "")[:120],
+                len(validated.languages),
+                len(validated.frameworks),
+                len(validated.domains),
+                len(validated.skills),
+                len(validated.tools),
+            )
+            logger.debug("KG extractor entities: %s", validated.to_dict())
+            return validated
         except json.JSONDecodeError as exc:
-            logger.warning("LLM extraction failed (JSON parse): %s", exc)
+            logger.warning(
+                "KG extractor LLM JSON parse failed: %s — using regex fallback", exc
+            )
         except Exception as exc:
-            logger.warning("LLM extraction failed (unexpected): %s", exc)
+            logger.warning(
+                "KG extractor LLM call failed: %s — using regex fallback", exc
+            )
 
-        # 2. Only fall back to regex when LLM extraction fails.
-        fallback_result = self._fallback.extract(
-            files, commit_messages, title, body, labels
+        # LLM call failed at runtime → regex as last resort.
+        return _validate_against_taxonomy(
+            self._fallback.extract(files, commit_messages, title, body, labels)
         )
-        return _validate_against_taxonomy(fallback_result)
 
     def _call_llm(self, context: str) -> ExtractedEntities:
         """Call Gemini Flash via Vertex AI with the taxonomy system prompt."""
