@@ -83,12 +83,15 @@ class GitHubRepository(BaseModel):
     languages: dict[str, int] = Field(default_factory=dict)
     contributors: list["GitHubContributor"] = Field(default_factory=list)
 
+
 class GitHubContributor(BaseModel):
     """Schema for a GitHub Contributor."""
+
     login: str
     id: int
     avatar_url: HttpUrl | None = None
     contributions: int = 0
+
 
 class GitHubSyncRequest(BaseModel):
     """Request schema for GitHub PR sync."""

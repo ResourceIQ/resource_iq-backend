@@ -104,6 +104,7 @@ class GithubIntegrationService:
                     pushed_at=r.pushed_at,
                 )
             )
+        return repos
 
     def get_live_repositories(self) -> list[GitHubRepository]:
         """Get all repositories with live stats like branch and PR counts."""
@@ -126,10 +127,12 @@ class GithubIntegrationService:
                 open_pr_count = len(all_pulls)
                 pull_request_count = r.get_pulls(state="all").totalCount
                 closed_pr_count = r.get_pulls(state="closed").totalCount
-                
+
                 # Calculate stale PRs (not updated in > 3 days)
                 three_days_ago = datetime.utcnow() - timedelta(days=3)
-                stale_pr_count = sum(1 for pr in all_pulls if pr.updated_at < three_days_ago)
+                stale_pr_count = sum(
+                    1 for pr in all_pulls if pr.updated_at < three_days_ago
+                )
 
                 # Use search for merged PRs as it's more accurate than iterating
                 merged_pr_count = gh.search_issues(

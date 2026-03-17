@@ -295,6 +295,8 @@ async def sync_issues(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+
 @router.get("/live/stats", response_model=JiraLiveStatsResponse)
 async def get_jira_live_stats(
     session: SessionDep,

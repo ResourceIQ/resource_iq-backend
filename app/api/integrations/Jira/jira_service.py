@@ -24,6 +24,7 @@ from app.api.integrations.Jira.jira_model import (
     JiraOrgIntegration,
 )
 from app.api.integrations.Jira.jira_schema import (
+    JiraAssigneeStats,
     JiraAssignIssueRequest,
     JiraAssignIssueResponse,
     JiraAuthCallbackResponse,
@@ -36,7 +37,6 @@ from app.api.integrations.Jira.jira_schema import (
     JiraIssueTypeStatusResponse,
     JiraLiveStatsResponse,
     JiraProjectStats,
-    JiraAssigneeStats,
     JiraSyncResponse,
     JiraUser,
 )
@@ -841,7 +841,7 @@ class JiraIntegrationService:
         fields = ["project", "status", "priority", "assignee"]
 
         # Handle Jira API pagination
-        all_issues = []
+        all_issues: list[Issue] = []
         batch_size = 100
         start_at = 0
 
