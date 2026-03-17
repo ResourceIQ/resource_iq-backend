@@ -2,7 +2,7 @@ import re
 from collections import Counter
 from typing import Any, cast
 
-from neomodel import db
+from neomodel import db  # type: ignore[attr-defined]
 
 from app.api.integrations.GitHub.github_schema import PullRequestContent
 from app.api.knowledge_graph.kg_extractor import ExtractedEntities
