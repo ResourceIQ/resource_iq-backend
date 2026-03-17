@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Any
 
-from github import Auth, Github
+from github import Auth, Github, GithubException
 from github.PullRequest import PullRequest
 from pydantic import HttpUrl
 from sqlalchemy.orm import Session
@@ -150,7 +150,10 @@ class GithubIntegrationService:
             repo_contributors = []
             try:
                 # Use a small number to avoid hitting rate limits on contributors
-                for c in r.get_contributors()[:10]:
+                # Iterating with enumerate is safer than slicing on potentially empty/uninitialized repos
+                for i, c in enumerate(r.get_contributors()):
+                    if i >= 10:
+                        break
                     repo_contributors.append(
                         GitHubContributor(
                             login=c.login,
@@ -159,6 +162,10 @@ class GithubIntegrationService:
                             contributions=c.contributions,
                         )
                     )
+            except GithubException as e:
+                # 404/409 means no contributors/empty repo, not a real error
+                if e.status not in [404, 409]:
+                    logger.warning(f"Failed to get contributors for {r.name}: {e}")
             except Exception as e:
                 logger.warning(f"Failed to get contributors for {r.name}: {e}")
 
@@ -171,6 +178,10 @@ class GithubIntegrationService:
                     latest_workflow_status = (
                         latest_run.conclusion or latest_run.status
                     )  # success, failure, or in_progress
+            except GithubException as e:
+                # 403 means Actions not accessible, 404/409 means none/empty
+                if e.status not in [403, 404, 409]:
+                    logger.warning(f"Failed to get workflow status for {r.name}: {e}")
             except Exception as e:
                 logger.warning(f"Failed to get workflow status for {r.name}: {e}")
 
@@ -187,6 +198,10 @@ class GithubIntegrationService:
                 latest_commit = next(iter(r.get_commits()), None)
                 if latest_commit:
                     last_commit_at = latest_commit.commit.author.date
+            except GithubException as e:
+                # 409 means empty repository, 404 not found
+                if e.status not in [404, 409]:
+                    logger.warning(f"Failed to get last commit for {r.name}: {e}")
             except Exception as e:
                 logger.warning(f"Failed to get last commit for {r.name}: {e}")
 
