@@ -32,6 +32,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraCreateIssueRequest,
     JiraCreateIssueResponse,
     JiraIssueContent,
+    JiraIssueDetailResponse,
     JiraIssueTypeStatusResponse,
     JiraSyncResponse,
     JiraUser,
@@ -1189,6 +1190,61 @@ class JiraIntegrationService:
                 logger.warning(
                     f"Error updating resource profile for {account_id}: {str(e)}"
                 )
+
+    def get_issue(self, issue_key: str) -> JiraIssueDetailResponse:
+        """Fetch a single Jira issue by its key."""
+        client = self.get_jira_client()
+        auth_header = client._session.headers.get("Authorization")
+        if not auth_header:
+            raise ValueError("No Authorization header in session")
+
+        server = client._options["server"]
+        headers = {
+            "Authorization": auth_header,
+            "Accept": "application/json",
+        }
+
+        resp = httpx.get(
+            f"{server}/rest/api/3/issue/{issue_key}",
+            headers=headers,
+            params={"fields": "summary,description,assignee,status,issuetype"},
+            timeout=15,
+        )
+
+        if resp.status_code == 404:
+            raise ValueError(f"Issue {issue_key} not found")
+        if resp.status_code != 200:
+            raise ValueError(
+                f"Failed to fetch issue: HTTP {resp.status_code} - {resp.text}"
+            )
+
+        data = resp.json()
+        fields = data.get("fields", {})
+
+        description_field = fields.get("description")
+        plain_description: str | None = None
+        if description_field and isinstance(description_field, dict):
+            paragraphs: list[str] = []
+            for block in description_field.get("content", []):
+                for inline in block.get("content", []):
+                    if inline.get("type") == "text":
+                        paragraphs.append(inline.get("text", ""))
+            plain_description = " ".join(paragraphs) if paragraphs else None
+        elif isinstance(description_field, str):
+            plain_description = description_field
+
+        assignee_field = fields.get("assignee")
+        assigned_to = assignee_field.get("displayName") if assignee_field else None
+
+        return JiraIssueDetailResponse(
+            issue_key=data["key"],
+            issue_url=f"{self.jira_url}/browse/{data['key']}",
+            summary=fields.get("summary", ""),
+            description=plain_description,
+            assigned_to=assigned_to,
+            status=fields.get("status", {}).get("name", "Unknown"),
+            issue_type=fields.get("issuetype", {}).get("name", "Unknown"),
+        )
 
     def create_issue(self, request: JiraCreateIssueRequest) -> JiraCreateIssueResponse:
         """Create a Jira issue and optionally assign it to a user."""
