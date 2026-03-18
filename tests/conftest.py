@@ -17,8 +17,12 @@ def db() -> Generator[Session, None, None]:
     with Session(engine) as session:
         init_db(session)
         yield session
-        statement = delete(User)
-        session.execute(statement)
+        from app.api.profiles.position_model import JobPosition
+        from app.api.profiles.profile_model import ResourceProfile
+
+        session.execute(delete(ResourceProfile))
+        session.execute(delete(JobPosition))
+        session.execute(delete(User))
         session.commit()
 
 
