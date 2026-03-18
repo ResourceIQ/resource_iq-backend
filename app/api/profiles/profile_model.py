@@ -29,8 +29,10 @@ class ResourceProfile(SQLModel, table=True):
         default=None, description="Residentaial or work address"
     )
 
-    position: str | None = Field(
-        default=None, description="Job position/title of the resource"
+    position_id: int | None = Field(
+        default=None,
+        foreign_key="job_positions.id",
+        description="Job position ID of the resource",
     )
     # === Jira Integration (optional) ===
     jira_account_id: str | None = Field(
