@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class JobPosition(SQLModel, table=True):
@@ -25,3 +25,6 @@ class JobPosition(SQLModel, table=True):
     # === Timestamps ===
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
+
+    # === Relationships ===
+    profiles: list["ResourceProfile"] = Relationship(back_populates="position")

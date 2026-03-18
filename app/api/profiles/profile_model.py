@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class ResourceProfile(SQLModel, table=True):
@@ -34,6 +34,8 @@ class ResourceProfile(SQLModel, table=True):
         foreign_key="job_positions.id",
         description="Job position ID of the resource",
     )
+    position: "JobPosition" | None = Relationship(back_populates="profiles")
+
     # === Jira Integration (optional) ===
     jira_account_id: str | None = Field(
         default=None,
