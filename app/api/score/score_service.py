@@ -8,6 +8,7 @@ from torch import cosine_similarity
 
 from app.api.embedding.embedding_model import GitHubPRVector, JiraIssueVector
 from app.api.embedding.embedding_service import VectorEmbeddingService
+from app.api.integrations.Jira.jira_model import JiraOAuthToken, JiraOrgIntegration
 from app.api.knowledge_graph.kg_extractor import ExtractedEntities, LLMEntityExtractor
 from app.api.knowledge_graph.kg_schema import KGExpertiseSummary
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
@@ -230,6 +231,18 @@ class ScoreService:
 
         return final_score, pr_matches[:3]
 
+    def _resolve_jira_browse_url(self) -> str:
+        """Resolve the browsable Jira site URL from OAuth token, org integration, or settings."""
+        token = self.db.query(JiraOAuthToken.jira_site_url).first()
+        if token and token.jira_site_url:
+            return token.jira_site_url.rstrip("/")
+
+        integration = self.db.query(JiraOrgIntegration.jira_url).first()
+        if integration and integration.jira_url:
+            return integration.jira_url.rstrip("/")
+
+        return (settings.JIRA_URL or "").rstrip("/")
+
     @staticmethod
     def _extract_summary_from_context(context: str) -> str:
         """Extract the SUMMARY field from a Jira issue context string."""
@@ -257,7 +270,8 @@ class ScoreService:
         if not issues:
             return 0.0, []
 
-        jira_base_url = (settings.JIRA_URL or "").rstrip("/")
+        jira_base_url = self._resolve_jira_browse_url()
+
         task_tensor = torch.tensor(task_embedding, dtype=torch.float)
         similarities: list[float] = []
         issue_matches: list[IssueScoreInfo] = []
