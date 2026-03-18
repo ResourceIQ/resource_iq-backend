@@ -93,9 +93,12 @@ async def create_profile(
 
     if request.position_id is not None:
         from app.api.profiles.position_model import JobPosition
+
         position = session.get(JobPosition, request.position_id)
         if not position:
-            raise HTTPException(status_code=400, detail="Invalid position_id: Job position not found")
+            raise HTTPException(
+                status_code=400, detail="Invalid position_id: Job position not found"
+            )
 
     profile = ResourceProfile(
         user_id=request.user_id,
@@ -357,9 +360,12 @@ async def update_skills(
 
     if request.position_id is not None:
         from app.api.profiles.position_model import JobPosition
+
         position = session.get(JobPosition, request.position_id)
         if not position:
-            raise HTTPException(status_code=400, detail="Invalid position_id: Job position not found")
+            raise HTTPException(
+                status_code=400, detail="Invalid position_id: Job position not found"
+            )
         profile.position_id = request.position_id
 
     if request.skills is not None:

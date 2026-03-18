@@ -3,6 +3,7 @@
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from sqlmodel import select
 
 from app.api.profiles.position_model import JobPosition
 from app.api.profiles.position_schema import (
@@ -12,18 +13,21 @@ from app.api.profiles.position_schema import (
 )
 from app.utils.deps import CurrentUser, SessionDep
 
-
 router = APIRouter(prefix="/positions", tags=["Job Positions"])
 
 
 @router.post("/", response_model=JobPositionResponse)
 async def create_position(
-    session: SessionDep, current_user: CurrentUser, request: JobPositionCreate
-) -> JobPositionResponse:
+    session: SessionDep, _current_user: CurrentUser, request: JobPositionCreate
+) -> Any:
     """Create a new job position."""
-    existing = session.query(JobPosition).filter(JobPosition.name == request.name).first()
+    existing = (
+        session.exec(select(JobPosition).where(JobPosition.name == request.name)).first()
+    )
     if existing:
-        raise HTTPException(status_code=400, detail="Job position with this name already exists")
+        raise HTTPException(
+            status_code=400, detail="Job position with this name already exists"
+        )
 
     position = JobPosition(name=request.name, description=request.description)
     session.add(position)
@@ -37,16 +41,14 @@ async def list_positions(
     session: SessionDep,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
-) -> list[JobPositionResponse]:
+) -> Any:
     """List all job positions."""
-    positions = session.query(JobPosition).offset(skip).limit(limit).all()
+    positions = session.exec(select(JobPosition).offset(skip).limit(limit)).all()
     return positions
 
 
 @router.get("/{position_id}", response_model=JobPositionResponse)
-async def get_position(
-    session: SessionDep, position_id: int
-) -> JobPositionResponse:
+async def get_position(session: SessionDep, position_id: int) -> Any:
     """Get a job position by ID."""
     position = session.get(JobPosition, position_id)
     if not position:
@@ -57,10 +59,10 @@ async def get_position(
 @router.patch("/{position_id}", response_model=JobPositionResponse)
 async def update_position(
     session: SessionDep,
-    current_user: CurrentUser,
+    _current_user: CurrentUser,
     position_id: int,
     request: JobPositionUpdate,
-) -> JobPositionResponse:
+) -> Any:
     """Update a job position."""
     position = session.get(JobPosition, position_id)
     if not position:
@@ -68,9 +70,13 @@ async def update_position(
 
     update_data = request.model_dump(exclude_unset=True)
     if "name" in update_data:
-        existing = session.query(JobPosition).filter(JobPosition.name == update_data["name"]).first()
+        existing = (
+            session.exec(select(JobPosition).where(JobPosition.name == update_data["name"])).first()
+        )
         if existing and existing.id != position_id:
-            raise HTTPException(status_code=400, detail="Job position with this name already exists")
+            raise HTTPException(
+                status_code=400, detail="Job position with this name already exists"
+            )
 
     for field, value in update_data.items():
         setattr(position, field, value)
@@ -83,7 +89,7 @@ async def update_position(
 
 @router.delete("/{position_id}")
 async def delete_position(
-    session: SessionDep, current_user: CurrentUser, position_id: int
+    session: SessionDep, _current_user: CurrentUser, position_id: int
 ) -> dict[str, str]:
     """Delete a job position."""
     position = session.get(JobPosition, position_id)

@@ -1,10 +1,13 @@
-"""Resource profile model for mapping users to external integrations."""
+from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
+
+if TYPE_CHECKING:
+    from app.api.profiles.position_model import JobPosition
 
 
 class ResourceProfile(SQLModel, table=True):
@@ -35,7 +38,7 @@ class ResourceProfile(SQLModel, table=True):
         foreign_key="job_positions.id",
         description="Job position ID of the resource",
     )
-    position: Optional["JobPosition"] = Relationship(back_populates="profiles")
+    position: JobPosition | None = Relationship(back_populates="profiles")
 
     # === Jira Integration (optional) ===
     jira_account_id: str | None = Field(

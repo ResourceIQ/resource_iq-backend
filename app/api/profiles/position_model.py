@@ -1,7 +1,12 @@
-import uuid
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
+
+if TYPE_CHECKING:
+    from app.api.profiles.profile_model import ResourceProfile
 
 
 class JobPosition(SQLModel, table=True):
@@ -27,4 +32,4 @@ class JobPosition(SQLModel, table=True):
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
     # === Relationships ===
-    profiles: list["ResourceProfile"] = Relationship(back_populates="position")
+    profiles: list[ResourceProfile] = Relationship(back_populates="position")
