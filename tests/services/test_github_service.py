@@ -20,6 +20,7 @@ from app.api.integrations.GitHub.github_service import GithubIntegrationService
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def mock_db() -> MagicMock:
     db = MagicMock()
@@ -126,7 +127,7 @@ def _make_mock_repo(
     full_name: str = "test-org/repo",
     prs: list[MagicMock] | None = None,
     contributors: list[dict[str, Any]] | None = None,
-    members: list[dict[str, Any]] | None = None,
+    _members: list[dict[str, Any]] | None = None,
 ) -> MagicMock:
     repo = MagicMock()
     repo.id = 999
@@ -315,8 +316,10 @@ class TestGetRepoContributors:
         repo = _make_mock_repo(
             name="my-repo",
             contributors=[
-                {"login": "alice", "id": 1, "avatar_url": "https://a.com/a.png", "contributions": 50},
-                {"login": "bob", "id": 2, "avatar_url": "https://a.com/b.png", "contributions": 30},
+                {"login": "alice", "id": 1,
+                    "avatar_url": "https://a.com/a.png", "contributions": 50},
+                {"login": "bob", "id": 2,
+                    "avatar_url": "https://a.com/b.png", "contributions": 30},
             ],
         )
         gh = _make_mock_github_client(repos=[repo])
@@ -349,7 +352,8 @@ class TestGetRepoPullRequests:
         gh = _make_mock_github_client(repos=[repo])
         mock_get_client.return_value = gh
 
-        result = service.get_repo_pull_requests("my-repo", state="closed", max_results=10)
+        result = service.get_repo_pull_requests(
+            "my-repo", state="closed", max_results=10)
 
         assert len(result) == 1
         assert result[0]["title"] == "Fix bug"
@@ -387,7 +391,8 @@ class TestGeneratePrContext:
                 {"filename": "src/cache.py", "status": "added"},
                 {"filename": "src/api.py", "status": "modified"},
             ],
-            commits=["feat: add Redis cache helper for responses", "refactor: integrate caching layer in the API"],
+            commits=["feat: add Redis cache helper for responses",
+                     "refactor: integrate caching layer in the API"],
         )
 
         result = service.generate_pr_context(pr)
@@ -472,8 +477,10 @@ class TestGetAllOrgMembers:
     ) -> None:
         gh = _make_mock_github_client(
             members=[
-                {"login": "alice", "id": 1, "email": "alice@test.com", "name": "Alice", "avatar_url": "https://a.com/a.png", "html_url": "https://github.com/alice"},
-                {"login": "bob", "id": 2, "email": None, "name": "Bob", "avatar_url": "https://a.com/b.png", "html_url": "https://github.com/bob"},
+                {"login": "alice", "id": 1, "email": "alice@test.com", "name": "Alice",
+                    "avatar_url": "https://a.com/a.png", "html_url": "https://github.com/alice"},
+                {"login": "bob", "id": 2, "email": None, "name": "Bob",
+                    "avatar_url": "https://a.com/b.png", "html_url": "https://github.com/bob"},
             ]
         )
         mock_get_client.return_value = gh
@@ -494,7 +501,8 @@ class TestGetAllOrgMembers:
         service: GithubIntegrationService,
     ) -> None:
         gh = _make_mock_github_client(
-            members=[{"login": "noavatar", "id": 3, "avatar_url": None, "html_url": None}]
+            members=[{"login": "noavatar", "id": 3,
+                      "avatar_url": None, "html_url": None}]
         )
         mock_get_client.return_value = gh
 
@@ -639,7 +647,7 @@ class TestSyncRepoPrs:
         )
         mock_gen_ctx.return_value = pr_content
 
-        result = service.sync_repo_prs(
+        service.sync_repo_prs(
             repo_names=["my-repo"],
             include_open=True,
             generate_embeddings=False,
@@ -668,7 +676,8 @@ class TestGetOrgClosedPrsContextByAuthor:
         service: GithubIntegrationService,
     ) -> None:
         alice_pr = _make_mock_pr(author_login="alice", author_id=42)
-        bob_pr = _make_mock_pr(author_login="bob", author_id=99, pr_id=200, number=2)
+        bob_pr = _make_mock_pr(
+            author_login="bob", author_id=99, pr_id=200, number=2)
         repo = _make_mock_repo(name="repo", prs=[alice_pr, bob_pr])
         gh = _make_mock_github_client(repos=[repo])
         mock_get_client.return_value = gh
@@ -695,7 +704,8 @@ class TestGetOrgClosedPrsContextByAuthor:
         mock_gen_ctx: MagicMock,
         service: GithubIntegrationService,
     ) -> None:
-        prs = [_make_mock_pr(pr_id=i, number=i, author_id=42) for i in range(5)]
+        prs = [_make_mock_pr(pr_id=i, number=i, author_id=42)
+               for i in range(5)]
         repo = _make_mock_repo(name="repo", prs=prs)
         gh = _make_mock_github_client(repos=[repo])
         mock_get_client.return_value = gh
@@ -707,7 +717,8 @@ class TestGetOrgClosedPrsContextByAuthor:
         mock_gen_ctx.return_value = pr_content
 
         author = GitHubUser(login="alice", id=42)
-        result = service.get_org_closed_prs_context_by_author(author, max_prs=2)
+        result = service.get_org_closed_prs_context_by_author(
+            author, max_prs=2)
 
         assert len(result) == 2
 
@@ -747,7 +758,8 @@ class TestGetOrgClosedPrsContextAllAuthors:
         service: GithubIntegrationService,
     ) -> None:
         alice_pr = _make_mock_pr(author_login="alice", author_id=42)
-        bob_pr = _make_mock_pr(author_login="bob", author_id=99, pr_id=200, number=2)
+        bob_pr = _make_mock_pr(
+            author_login="bob", author_id=99, pr_id=200, number=2)
         repo = _make_mock_repo(name="repo", prs=[alice_pr, bob_pr])
         gh = _make_mock_github_client(repos=[repo])
         mock_get_client.return_value = gh
@@ -778,7 +790,8 @@ class TestGetOrgClosedPrsContextAllAuthors:
         mock_gen_ctx: MagicMock,
         service: GithubIntegrationService,
     ) -> None:
-        prs = [_make_mock_pr(pr_id=i, number=i, author_login="alice", author_id=42) for i in range(5)]
+        prs = [_make_mock_pr(
+            pr_id=i, number=i, author_login="alice", author_id=42) for i in range(5)]
         repo = _make_mock_repo(name="repo", prs=prs)
         gh = _make_mock_github_client(repos=[repo])
         mock_get_client.return_value = gh
@@ -789,7 +802,8 @@ class TestGetOrgClosedPrsContextAllAuthors:
             author=GitHubUser(login="alice", id=42), repo_id=999,
         )
 
-        result = service.get_org_closed_prs_context_all_authors(max_prs_per_author=2)
+        result = service.get_org_closed_prs_context_all_authors(
+            max_prs_per_author=2)
 
         assert len(result["alice"]) == 2
 
@@ -842,7 +856,8 @@ class TestSyncAllAuthorsPrsToVectors:
         service: GithubIntegrationService,
     ) -> None:
         alice_pr = _make_mock_pr(author_login="alice", author_id=42)
-        bob_pr = _make_mock_pr(author_login="bob", author_id=99, pr_id=200, number=2)
+        bob_pr = _make_mock_pr(
+            author_login="bob", author_id=99, pr_id=200, number=2)
         repo = _make_mock_repo(name="repo", prs=[alice_pr, bob_pr])
         gh = _make_mock_github_client(repos=[repo])
         mock_get_client.return_value = gh
@@ -860,7 +875,8 @@ class TestSyncAllAuthorsPrsToVectors:
         mock_vs.store_pr_contexts.return_value = 1
         mock_vector_svc.return_value = mock_vs
 
-        result = service.sync_all_authors_prs_to_vectors(max_prs_per_author=100)
+        result = service.sync_all_authors_prs_to_vectors(
+            max_prs_per_author=100)
 
         assert result["total_authors"] == 2
         assert result["total_prs"] == 2
@@ -897,7 +913,8 @@ class TestSyncAllAuthorsPrsToVectors:
         mock_vector_svc: MagicMock,
         service: GithubIntegrationService,
     ) -> None:
-        prs = [_make_mock_pr(pr_id=i, number=i, author_login="alice", author_id=42) for i in range(10)]
+        prs = [_make_mock_pr(
+            pr_id=i, number=i, author_login="alice", author_id=42) for i in range(10)]
         repo = _make_mock_repo(name="repo", prs=prs)
         gh = _make_mock_github_client(repos=[repo])
         mock_get_client.return_value = gh
@@ -912,6 +929,6 @@ class TestSyncAllAuthorsPrsToVectors:
         mock_vs.store_pr_contexts.return_value = 3
         mock_vector_svc.return_value = mock_vs
 
-        result = service.sync_all_authors_prs_to_vectors(max_prs_per_author=3)
+        service.sync_all_authors_prs_to_vectors(max_prs_per_author=3)
 
         assert mock_gen_ctx.call_count == 3
