@@ -4,11 +4,8 @@ All external I/O (database, HTTP, Jira SDK) is mocked so these tests
 run without any network or database access.
 """
 
-import hashlib
-import hmac
 import time
-from datetime import datetime, timedelta
-from types import SimpleNamespace
+from datetime import datetime
 from typing import Any
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -22,7 +19,6 @@ from app.api.integrations.Jira.jira_schema import (
     JiraUser,
 )
 from app.api.integrations.Jira.jira_service import JiraIntegrationService
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

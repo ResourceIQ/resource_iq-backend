@@ -1,6 +1,6 @@
 """Dashboard API route."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.dashboard.dashboard_schema import (
     ConnectedIntegrationsCard,
@@ -20,18 +20,27 @@ from app.api.dashboard.dashboard_service import (
     get_profile_skills,
     get_profile_workload,
 )
-from app.utils.deps import CurrentUser, SessionDep
+from app.api.user.user_model import Role
+from app.utils.deps import CurrentUser, RoleChecker, SessionDep
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-@router.get("/", response_model=DashboardResponse)
+@router.get(
+    "/",
+    response_model=[DashboardResponse],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 def get_dashboard(session: SessionDep, _current_user: CurrentUser) -> DashboardResponse:
     """Get aggregated dashboard metrics."""
     return get_dashboard_data(session)
 
 
-@router.get("/integrations/health", response_model=ConnectedIntegrationsCard)
+@router.get(
+    "/integrations/health",
+    response_model=ConnectedIntegrationsCard,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 def get_integrations_health(
     session: SessionDep, _current_user: CurrentUser
 ) -> ConnectedIntegrationsCard:
@@ -39,7 +48,11 @@ def get_integrations_health(
     return get_integration_health(session)
 
 
-@router.get("/github/prs/stats", response_model=GitHubPRStatsCard)
+@router.get(
+    "/github/prs/stats",
+    response_model=GitHubPRStatsCard,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 def get_github_stats(
     session: SessionDep, _current_user: CurrentUser
 ) -> GitHubPRStatsCard:
@@ -47,7 +60,11 @@ def get_github_stats(
     return get_github_pr_stats(session)
 
 
-@router.get("/jira/tasks/stats", response_model=JiraTaskStatsCard)
+@router.get(
+    "/jira/tasks/stats",
+    response_model=JiraTaskStatsCard,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 def get_jira_stats(
     session: SessionDep, _current_user: CurrentUser
 ) -> JiraTaskStatsCard:
@@ -71,7 +88,11 @@ def get_workload_analysis(
     return get_profile_workload(session)
 
 
-@router.get("/profiles/integrations", response_model=ProfileIntegrationsCard)
+@router.get(
+    "/profiles/integrations",
+    response_model=ProfileIntegrationsCard,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 def get_integration_adoption(
     session: SessionDep, _current_user: CurrentUser
 ) -> ProfileIntegrationsCard:
