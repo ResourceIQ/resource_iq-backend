@@ -191,9 +191,9 @@ class Settings(BaseSettings):
     # Asymmetric embedding prompt names (Jina task prefixes)
     GITHUB_QUERY_PROMPT_NAME: str = "nl2code_query"
     GITHUB_DOCUMENT_PROMPT_NAME: str = "nl2code_document"
-    # Jira issue text is natural-language heavy, so use retrieval-style prompts.
-    JIRA_QUERY_PROMPT_NAME: str = "retrieval_query"
-    JIRA_DOCUMENT_PROMPT_NAME: str = "retrieval_document"
+    # jina-code-embeddings only supports nl2code/qa/code2code tasks, not retrieval.
+    JIRA_QUERY_PROMPT_NAME: str = "nl2code_query"
+    JIRA_DOCUMENT_PROMPT_NAME: str = "nl2code_document"
 
     # Redis sidecar for long-running task status + logs
     REDIS_HOST: str = "localhost"
