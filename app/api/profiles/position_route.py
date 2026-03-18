@@ -21,9 +21,9 @@ async def create_position(
     session: SessionDep, _current_user: CurrentUser, request: JobPositionCreate
 ) -> Any:
     """Create a new job position."""
-    existing = (
-        session.exec(select(JobPosition).where(JobPosition.name == request.name)).first()
-    )
+    existing = session.exec(
+        select(JobPosition).where(JobPosition.name == request.name)
+    ).first()
     if existing:
         raise HTTPException(
             status_code=400, detail="Job position with this name already exists"
@@ -70,9 +70,9 @@ async def update_position(
 
     update_data = request.model_dump(exclude_unset=True)
     if "name" in update_data:
-        existing = (
-            session.exec(select(JobPosition).where(JobPosition.name == update_data["name"])).first()
-        )
+        existing = session.exec(
+            select(JobPosition).where(JobPosition.name == update_data["name"])
+        ).first()
         if existing and existing.id != position_id:
             raise HTTPException(
                 status_code=400, detail="Job position with this name already exists"
