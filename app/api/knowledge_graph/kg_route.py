@@ -1,14 +1,15 @@
-from fastapi import APIRouter
+from fastapi import APIRouter,Depends
 
 from app.api.knowledge_graph.kg_build_service import KGBuildService
 from app.api.knowledge_graph.kg_schema import KGBuildResult
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
-from app.utils.deps import SessionDep
+from app.utils.deps import SessionDep,RoleChecker
+from app.api.user.user_model import Role
 
 router = APIRouter(prefix="/kg", tags=["knowledge_graph"])
 
 
-@router.post("/graph/build")
+@router.post("/graph/build",dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
 async def build_knowledge_graph(
     session: SessionDep,
     author_login: str | None = None,  # optional: rebuild for one author only
