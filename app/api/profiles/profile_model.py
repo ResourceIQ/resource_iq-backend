@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -38,7 +36,7 @@ class ResourceProfile(SQLModel, table=True):
         foreign_key="job_positions.id",
         description="Job position ID of the resource",
     )
-    position: JobPosition | None = Relationship(back_populates="profiles")
+    position: Optional["JobPosition"] = Relationship(back_populates="profiles")
 
     # === Jira Integration (optional) ===
     jira_account_id: str | None = Field(

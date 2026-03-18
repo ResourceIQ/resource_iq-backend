@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -32,4 +30,4 @@ class JobPosition(SQLModel, table=True):
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
     # === Relationships ===
-    profiles: list[ResourceProfile] = Relationship(back_populates="position")
+    profiles: list["ResourceProfile"] = Relationship(back_populates="position")
