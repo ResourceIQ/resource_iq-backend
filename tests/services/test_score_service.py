@@ -4,13 +4,15 @@ All database queries, embedding generation, and torch operations are
 mocked so these tests run without GPU, model files, or database access.
 """
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
-from app.api.score.score_schema import BestFitInput, PrScoreInfo
+from app.api.score.score_schema import BestFitInput, PrScoreInfo, ScoreProfile
 from app.api.score.score_service import ScoreService
+
 
 # ---------------------------------------------------------------------------
 # Fixtures

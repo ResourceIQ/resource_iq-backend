@@ -1,13 +1,11 @@
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks
 from sqlmodel import Session
 
 from app.api.knowledge_graph.kg_build_service import KGBuildService
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
-from app.api.user.user_model import Role
 from app.db.session import engine
-from app.utils.deps import RoleChecker
 
 router = APIRouter(prefix="/kg", tags=["knowledge_graph"])
 
@@ -26,9 +24,7 @@ def _run_kg_build(author_login: str | None, batch_size: int) -> None:
         logger.info("Background KG build complete: %s", result)
 
 
-@router.post(
-    "/graph/build", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
-)
+@router.post("/graph/build")
 async def build_knowledge_graph(
     background_tasks: BackgroundTasks,
     author_login: str | None = None,  # optional: rebuild for one author only

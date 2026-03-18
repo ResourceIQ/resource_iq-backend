@@ -9,10 +9,12 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
 
 def _make_profile(
     total_workload: int = 0,
@@ -65,8 +67,7 @@ class TestGetIntegrationHealth:
         github_integration = MagicMock()
         github_integration.org_name = "my-org"
 
-        session.exec.return_value.first.side_effect = [
-            jira_token, github_integration]
+        session.exec.return_value.first.side_effect = [jira_token, github_integration]
 
         result = get_integration_health(session)
 
@@ -88,8 +89,7 @@ class TestGetIntegrationHealth:
         github_integration = MagicMock()
         github_integration.org_name = "my-org"
 
-        session.exec.return_value.first.side_effect = [
-            jira_token, github_integration]
+        session.exec.return_value.first.side_effect = [jira_token, github_integration]
 
         result = get_integration_health(session)
 
@@ -125,8 +125,7 @@ class TestGetIntegrationHealth:
         github_integration = MagicMock()
         github_integration.org_name = "my-org"
 
-        session.exec.return_value.first.side_effect = [
-            None, github_integration]
+        session.exec.return_value.first.side_effect = [None, github_integration]
 
         result = get_integration_health(session)
 
@@ -160,8 +159,7 @@ class TestGetProfileSkills:
 
         session = MagicMock()
         profiles = [
-            _make_profile(skills="Python,FastAPI,Docker",
-                          domains="Backend,DevOps"),
+            _make_profile(skills="Python,FastAPI,Docker", domains="Backend,DevOps"),
             _make_profile(skills="Python,React", domains="Backend,Frontend"),
             _make_profile(skills="Docker,Kubernetes", domains="DevOps"),
         ]
@@ -173,8 +171,7 @@ class TestGetProfileSkills:
         assert "Python" in skill_names
         assert "Docker" in skill_names
 
-        python_count = next(
-            s.count for s in result.top_skills if s.name == "Python")
+        python_count = next(s.count for s in result.top_skills if s.name == "Python")
         assert python_count == 2
 
         domain_names = [d.name for d in result.top_domains]
@@ -325,8 +322,7 @@ class TestGetDashboardData:
         ]
 
         call_count = 0
-
-        def exec_side_effect(_stmt: Any) -> MagicMock:
+        def exec_side_effect(stmt: Any) -> MagicMock:
             nonlocal call_count
             result = MagicMock()
             call_count += 1
@@ -360,8 +356,7 @@ class TestGetDashboardData:
         profiles.append(_make_profile(total_workload=0))
 
         call_count = 0
-
-        def exec_side_effect(_stmt: Any) -> MagicMock:
+        def exec_side_effect(stmt: Any) -> MagicMock:
             nonlocal call_count
             result = MagicMock()
             call_count += 1
@@ -382,8 +377,7 @@ class TestGetDashboardData:
         session = MagicMock()
 
         call_count = 0
-
-        def exec_side_effect(_stmt: Any) -> MagicMock:
+        def exec_side_effect(stmt: Any) -> MagicMock:
             nonlocal call_count
             result = MagicMock()
             call_count += 1
@@ -412,8 +406,7 @@ class TestGetDashboardData:
         ]
 
         call_count = 0
-
-        def exec_side_effect(_stmt: Any) -> MagicMock:
+        def exec_side_effect(stmt: Any) -> MagicMock:
             nonlocal call_count
             result = MagicMock()
             call_count += 1
@@ -430,6 +423,5 @@ class TestGetDashboardData:
         assert "Frontend" in team_names
         assert "Unassigned" in team_names
 
-        backend = next(
-            a for a in result.resource_allocation_by_team if a.team_name == "Backend")
+        backend = next(a for a in result.resource_allocation_by_team if a.team_name == "Backend")
         assert backend.headcount == 2

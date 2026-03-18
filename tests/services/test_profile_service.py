@@ -12,6 +12,7 @@ from app.api.integrations.GitHub.github_schema import GitHubUser
 from app.api.integrations.Jira.jira_schema import JiraUser
 from app.api.profiles.profile_service import ProfileService
 
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

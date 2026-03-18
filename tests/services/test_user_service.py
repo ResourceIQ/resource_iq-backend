@@ -6,12 +6,14 @@ Database and password hashing are fully mocked.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.api.user import user_service
+
 
 # ===================================================================
 # 1. create_user
 # ===================================================================
-
 
 class TestCreateUser:
     @patch("app.api.user.user_service.get_password_hash")
@@ -26,8 +28,7 @@ class TestCreateUser:
         with patch("app.api.user.user_service.User") as mock_user_cls:
             mock_user_cls.model_validate.return_value = mock_user
 
-            result = user_service.create_user(
-                session=session, user_create=user_create)
+            result = user_service.create_user(session=session, user_create=user_create)
 
         mock_hash.assert_called_once_with("secure_password")
         mock_user_cls.model_validate.assert_called_once_with(
@@ -56,8 +57,7 @@ class TestUpdateUser:
             "password": "new_password",
         }
 
-        user_service.update_user(
-            session=session, db_user=db_user, user_in=user_in)
+        result = user_service.update_user(session=session, db_user=db_user, user_in=user_in)
 
         mock_hash.assert_called_once_with("new_password")
         db_user.sqlmodel_update.assert_called_once()
@@ -71,8 +71,7 @@ class TestUpdateUser:
         user_in = MagicMock()
         user_in.model_dump.return_value = {"full_name": "Updated Name"}
 
-        user_service.update_user(
-            session=session, db_user=db_user, user_in=user_in)
+        user_service.update_user(session=session, db_user=db_user, user_in=user_in)
 
         db_user.sqlmodel_update.assert_called_once()
         call_args = db_user.sqlmodel_update.call_args
@@ -89,8 +88,7 @@ class TestGetUserByEmail:
         mock_user = MagicMock()
         session.exec.return_value.first.return_value = mock_user
 
-        result = user_service.get_user_by_email(
-            session=session, email="alice@test.com")
+        result = user_service.get_user_by_email(session=session, email="alice@test.com")
 
         assert result is mock_user
 
@@ -98,8 +96,7 @@ class TestGetUserByEmail:
         session = MagicMock()
         session.exec.return_value.first.return_value = None
 
-        result = user_service.get_user_by_email(
-            session=session, email="nobody@test.com")
+        result = user_service.get_user_by_email(session=session, email="nobody@test.com")
 
         assert result is None
 

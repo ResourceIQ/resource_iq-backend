@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.api.profiles.profile_model import ResourceProfile
 from app.api.profiles.profile_schema import (
@@ -17,8 +17,7 @@ from app.api.profiles.profile_schema import (
     UpdateSkillsRequest,
 )
 from app.api.profiles.profile_service import ProfileService
-from app.api.user.user_model import Role
-from app.utils.deps import CurrentUser, RoleChecker, SessionDep
+from app.utils.deps import CurrentUser, SessionDep
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
@@ -76,11 +75,7 @@ async def get_my_profile(
     return _to_response(profile)
 
 
-@router.post(
-    "/",
-    response_model=ResourceProfileResponse,
-    dependencies=[Depends(RoleChecker([Role.ADMIN]))],
-)
+@router.post("/", response_model=ResourceProfileResponse)
 async def create_profile(
     session: SessionDep, request: ResourceProfileCreate
 ) -> ResourceProfileResponse:
@@ -108,11 +103,7 @@ async def create_profile(
     return _to_response(profile)
 
 
-@router.get(
-    "/",
-    response_model=list[ResourceProfileResponse],
-    dependencies=[Depends(RoleChecker([Role.ADMIN]))],
-)
+@router.get("/", response_model=list[ResourceProfileResponse])
 async def list_profiles(
     session: SessionDep,
     has_jira: bool | None = Query(default=None, description="Filter by Jira connected"),
@@ -138,11 +129,7 @@ async def list_profiles(
     return [_to_response(p) for p in profiles]
 
 
-@router.get(
-    "/workloads",
-    response_model=list[ProfileWorkload],
-    dependencies=[Depends(RoleChecker([Role.ADMIN]))],
-)
+@router.get("/workloads", response_model=list[ProfileWorkload])
 async def get_all_workloads(
     session: SessionDep,
     sort_by: str = Query(default="total", description="Sort by: total, jira, github"),
