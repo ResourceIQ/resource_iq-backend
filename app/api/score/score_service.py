@@ -312,14 +312,9 @@ class ScoreService:
 
         embedding_service = VectorEmbeddingService(self.db)
 
-        github_task_embedding = embedding_service.generate_embeddings(
+        task_embedding = embedding_service.generate_embeddings(
             [task],
             prompt_name=settings.GITHUB_QUERY_PROMPT_NAME,
-        )[0]
-
-        jira_task_embedding = embedding_service.generate_embeddings(
-            [task],
-            prompt_name=settings.JIRA_QUERY_PROMPT_NAME,
         )[0]
 
         task_entities = self._extract_task_entities(best_fit_input)
@@ -341,7 +336,7 @@ class ScoreService:
                     github_pr_score, top_prs = (
                         self._calculate_developer_github_score(
                             github_id=profile.github_id,
-                            task_embedding=github_task_embedding,
+                            task_embedding=task_embedding,
                             threshold=50,
                         )
                     )
@@ -369,7 +364,7 @@ class ScoreService:
                     jira_issue_score, top_issues = (
                         self._calculate_developer_jira_score(
                             jira_account_id=profile.jira_account_id,
-                            task_embedding=jira_task_embedding,
+                            task_embedding=task_embedding,
                             threshold=50,
                         )
                     )
