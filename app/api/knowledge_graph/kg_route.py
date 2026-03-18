@@ -1,14 +1,14 @@
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks,Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlmodel import Session
 
 from app.api.knowledge_graph.kg_build_service import KGBuildService
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
-from app.utils.deps import SessionDep,RoleChecker
 from app.api.user.user_model import Role
 from app.db.session import engine
+from app.utils.deps import RoleChecker
 
 router = APIRouter(prefix="/kg", tags=["knowledge_graph"])
 

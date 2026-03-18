@@ -4,7 +4,7 @@ import urllib.parse
 from datetime import datetime
 from typing import Any, cast
 
-from fastapi import APIRouter, HTTPException, Query,Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
 from app.api.integrations.Jira.jira_model import JiraOAuthToken
@@ -22,9 +22,9 @@ from app.api.integrations.Jira.jira_schema import (
     JiraSyncResponse,
 )
 from app.api.integrations.Jira.jira_service import JiraIntegrationService
-from app.core.config import settings
-from app.utils.deps import SessionDep,RoleChecker
 from app.api.user.user_model import Role
+from app.core.config import settings
+from app.utils.deps import RoleChecker, SessionDep
 
 router = APIRouter(prefix="/jira", tags=["jira"])
 

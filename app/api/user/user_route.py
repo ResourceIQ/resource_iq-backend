@@ -3,7 +3,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException,Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import func, select
 
 from app.api.user import user_service

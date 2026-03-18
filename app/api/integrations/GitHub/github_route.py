@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 import jwt
-from fastapi import APIRouter, HTTPException, Query,Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
 from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
@@ -20,9 +20,9 @@ from app.api.integrations.GitHub.github_schema import (
     PullRequestContent,
 )
 from app.api.integrations.GitHub.github_service import GithubIntegrationService
-from app.core.config import settings
-from app.utils.deps import SessionDep,RoleChecker
 from app.api.user.user_model import Role
+from app.core.config import settings
+from app.utils.deps import RoleChecker, SessionDep
 
 router = APIRouter(prefix="/github", tags=["github"])
 logger = logging.getLogger(__name__)

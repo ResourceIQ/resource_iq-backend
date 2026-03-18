@@ -1,6 +1,6 @@
 """Dashboard API route."""
 
-from fastapi import APIRouter,Depends
+from fastapi import APIRouter, Depends
 
 from app.api.dashboard.dashboard_schema import (
     ConnectedIntegrationsCard,
@@ -20,8 +20,8 @@ from app.api.dashboard.dashboard_service import (
     get_profile_skills,
     get_profile_workload,
 )
-from app.utils.deps import CurrentUser, SessionDep,RoleChecker
 from app.api.user.user_model import Role
+from app.utils.deps import CurrentUser, RoleChecker, SessionDep
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 

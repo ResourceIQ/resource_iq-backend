@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException,Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.score.score_schema import BestFitInput, ScoreProfile
 from app.api.score.score_service import ScoreService
-from app.utils.deps import SessionDep,RoleChecker
 from app.api.user.user_model import Role
+from app.utils.deps import RoleChecker, SessionDep
 
 router = APIRouter(prefix="/score", tags=["score"])
 

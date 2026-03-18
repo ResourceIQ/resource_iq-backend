@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, cast
 
-from fastapi import APIRouter, HTTPException, Query, Depends 
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.profiles.profile_model import ResourceProfile
 from app.api.profiles.profile_schema import (
@@ -17,8 +17,8 @@ from app.api.profiles.profile_schema import (
     UpdateSkillsRequest,
 )
 from app.api.profiles.profile_service import ProfileService
-from app.utils.deps import CurrentUser, SessionDep,RoleChecker
-from app.api.user.user_model import Role 
+from app.api.user.user_model import Role
+from app.utils.deps import CurrentUser, RoleChecker, SessionDep
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 

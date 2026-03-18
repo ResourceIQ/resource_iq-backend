@@ -6,10 +6,7 @@ Database and password hashing are fully mocked.
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.api.user import user_service
-
 
 # ===================================================================
 # 1. create_user
