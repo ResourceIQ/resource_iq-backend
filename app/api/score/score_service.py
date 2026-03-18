@@ -237,9 +237,9 @@ class ScoreService:
         if token and token.jira_site_url:
             return str(token.jira_site_url).rstrip("/")
 
-        integration: JiraOrgIntegration | None = (
-            self.db.query(JiraOrgIntegration).first()
-        )
+        integration: JiraOrgIntegration | None = self.db.query(
+            JiraOrgIntegration
+        ).first()
         if integration and integration.jira_url:
             return str(integration.jira_url).rstrip("/")
 
@@ -250,7 +250,7 @@ class ScoreService:
         """Extract the SUMMARY field from a Jira issue context string."""
         for line in context.splitlines():
             if line.startswith("SUMMARY: "):
-                return line[len("SUMMARY: "):]
+                return line[len("SUMMARY: ") :]
         return ""
 
     def _calculate_developer_jira_score(
@@ -349,12 +349,10 @@ class ScoreService:
 
             try:
                 if profile.github_id:
-                    github_pr_score, top_prs = (
-                        self._calculate_developer_github_score(
-                            github_id=profile.github_id,
-                            task_embedding=task_embedding,
-                            threshold=50,
-                        )
+                    github_pr_score, top_prs = self._calculate_developer_github_score(
+                        github_id=profile.github_id,
+                        task_embedding=task_embedding,
+                        threshold=50,
                     )
                     score_profile.github_pr_score = github_pr_score
                     score_profile.pr_info = top_prs
@@ -377,12 +375,10 @@ class ScoreService:
                             self._disable_kg_scoring = True
 
                 if profile.jira_account_id:
-                    jira_issue_score, top_issues = (
-                        self._calculate_developer_jira_score(
-                            jira_account_id=profile.jira_account_id,
-                            task_embedding=task_embedding,
-                            threshold=50,
-                        )
+                    jira_issue_score, top_issues = self._calculate_developer_jira_score(
+                        jira_account_id=profile.jira_account_id,
+                        task_embedding=task_embedding,
+                        threshold=50,
                     )
                     score_profile.jira_issue_score = jira_issue_score
                     score_profile.issue_info = top_issues
