@@ -15,6 +15,7 @@ from app.api.embedding.embedding_service import (
     is_retryable_error,
 )
 
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -244,9 +245,7 @@ class TestStoreAllAuthorsPrContexts:
     def test_calls_store_for_each_author(
         self, mock_store: MagicMock, service: VectorEmbeddingService
     ) -> None:
-        from app.api.integrations.GitHub.github_schema import (
-            GitHubUser,
-        )
+        from app.api.integrations.GitHub.github_schema import GitHubUser, PullRequestContent
 
         pr1 = MagicMock()
         pr1.author = GitHubUser(login="alice", id=1)

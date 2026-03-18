@@ -4,7 +4,7 @@ import urllib.parse
 from datetime import datetime
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
 from app.api.integrations.Jira.jira_model import JiraOAuthToken
@@ -22,18 +22,13 @@ from app.api.integrations.Jira.jira_schema import (
     JiraSyncResponse,
 )
 from app.api.integrations.Jira.jira_service import JiraIntegrationService
-from app.api.user.user_model import Role
 from app.core.config import settings
-from app.utils.deps import RoleChecker, SessionDep
+from app.utils.deps import SessionDep
 
 router = APIRouter(prefix="/jira", tags=["jira"])
 
 
-@router.get(
-    "/auth/connect",
-    response_model=JiraAuthConnectResponse,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.get("/auth/connect", response_model=JiraAuthConnectResponse)
 async def connect_jira(session: SessionDep) -> JiraAuthConnectResponse:
     """Initiate Atlassian OAuth (3LO) for Jira Cloud."""
     try:
@@ -45,9 +40,7 @@ async def connect_jira(session: SessionDep) -> JiraAuthConnectResponse:
         raise HTTPException(status_code=500, detail=f"Failed to start OAuth: {str(e)}")
 
 
-@router.get(
-    "/auth/callback", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
-)
+@router.get("/auth/callback")
 async def jira_oauth_callback(
     session: SessionDep,
     code: str = Query(..., description="Authorization code from Atlassian"),
@@ -81,9 +74,7 @@ async def jira_oauth_callback(
         return RedirectResponse(url=redirect_url, status_code=302)
 
 
-@router.get(
-    "/auth/status", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
-)
+@router.get("/auth/status")
 async def get_jira_auth_status(session: SessionDep) -> dict[str, Any]:
     """Return Jira OAuth connection status for the configuration page."""
     token = (
@@ -126,10 +117,7 @@ async def get_jira_auth_status(session: SessionDep) -> dict[str, Any]:
     }
 
 
-@router.post(
-    "/auth/disconnect",
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.post("/auth/disconnect")
 async def disconnect_jira_auth(session: SessionDep) -> dict[str, str]:
     """Disconnect Jira OAuth by removing stored tokens."""
     tokens = session.query(JiraOAuthToken).all()
@@ -142,7 +130,6 @@ async def disconnect_jira_auth(session: SessionDep) -> dict[str, str]:
 @router.post(
     "/issue-type-statuses/sync",
     response_model=list[JiraIssueTypeStatusResponse],
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
 )
 async def sync_issue_type_statuses(
     session: SessionDep,
@@ -164,7 +151,6 @@ async def sync_issue_type_statuses(
 @router.get(
     "/issue-type-statuses",
     response_model=list[JiraIssueTypeStatusResponse],
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
 )
 async def get_issue_type_statuses(
     session: SessionDep,
@@ -183,7 +169,6 @@ async def get_issue_type_statuses(
 @router.put(
     "/issue-type-statuses/{issue_type_id}",
     response_model=JiraIssueTypeStatusResponse,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
 )
 async def update_issue_type_selected_statuses(
     session: SessionDep,
@@ -206,9 +191,7 @@ async def update_issue_type_selected_statuses(
         )
 
 
-@router.get(
-    "/projects", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
-)
+@router.get("/projects")
 async def get_projects(session: SessionDep) -> list[dict[str, Any]]:
     """
     Get all accessible Jira projects.
@@ -224,9 +207,7 @@ async def get_projects(session: SessionDep) -> list[dict[str, Any]]:
         )
 
 
-@router.get(
-    "/issue-types", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
-)
+@router.get("/issue-types")
 async def get_issue_types(session: SessionDep) -> list[dict[str, Any]]:
     """Get all available Jira issue types (excludes subtasks)."""
     try:
@@ -240,11 +221,7 @@ async def get_issue_types(session: SessionDep) -> list[dict[str, Any]]:
         )
 
 
-@router.get(
-    "/issues/{issue_key}",
-    response_model=JiraIssueDetailResponse,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.get("/issues/{issue_key}", response_model=JiraIssueDetailResponse)
 async def get_issue(
     session: SessionDep,
     issue_key: str,
@@ -279,11 +256,7 @@ async def create_issue(
         raise HTTPException(status_code=500, detail=f"Failed to create issue: {str(e)}")
 
 
-@router.put(
-    "/issues/{issue_key}/assignee",
-    response_model=JiraAssignIssueResponse,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.put("/issues/{issue_key}/assignee", response_model=JiraAssignIssueResponse)
 async def assign_issue(
     session: SessionDep,
     issue_key: str,
@@ -299,11 +272,7 @@ async def assign_issue(
         raise HTTPException(status_code=500, detail=f"Failed to assign issue: {str(e)}")
 
 
-@router.post(
-    "/sync",
-    response_model=JiraSyncResponse,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.post("/sync", response_model=JiraSyncResponse)
 async def sync_issues(
     session: SessionDep,
     request: JiraSyncRequest,

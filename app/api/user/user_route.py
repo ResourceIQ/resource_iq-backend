@@ -28,7 +28,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get(
     "/",
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+    dependencies=[Depends(RoleChecker([Role.ADMIN]))],
     response_model=UsersPublic,
 )
 def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
@@ -46,9 +46,7 @@ def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
 
 
 @router.post(
-    "/",
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-    response_model=UserPublic,
+    "/", dependencies=[Depends(RoleChecker([Role.ADMIN]))], response_model=UserPublic
 )
 def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     """
@@ -74,11 +72,7 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     return user
 
 
-@router.patch(
-    "/me",
-    response_model=UserPublic,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.patch("/me", response_model=UserPublic)
 def update_user_me(
     *, session: SessionDep, user_in: UserUpdateMe, current_user: CurrentUser
 ) -> Any:
@@ -102,11 +96,7 @@ def update_user_me(
     return current_user
 
 
-@router.patch(
-    "/me/password",
-    response_model=Message,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.patch("/me/password", response_model=Message)
 def update_password_me(
     *, session: SessionDep, body: UpdatePassword, current_user: CurrentUser
 ) -> Any:
@@ -126,11 +116,7 @@ def update_password_me(
     return Message(message="Password updated successfully")
 
 
-@router.get(
-    "/me",
-    response_model=UserPublic,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.get("/me", response_model=UserPublic)
 def read_user_me(current_user: CurrentUser) -> Any:
     """
     Get current user.
@@ -138,11 +124,7 @@ def read_user_me(current_user: CurrentUser) -> Any:
     return current_user
 
 
-@router.delete(
-    "/me",
-    response_model=Message,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.delete("/me", response_model=Message)
 def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     """
     Delete own user.
@@ -156,11 +138,7 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     return Message(message="User deleted successfully")
 
 
-@router.post(
-    "/signup",
-    response_model=UserPublic,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.post("/signup", response_model=UserPublic)
 def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     """
     Create new user without the need to be logged in.
@@ -176,11 +154,7 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     return user
 
 
-@router.get(
-    "/{user_id}",
-    response_model=UserPublic,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
-)
+@router.get("/{user_id}", response_model=UserPublic)
 def read_user_by_id(
     user_id: uuid.UUID, session: SessionDep, current_user: CurrentUser
 ) -> Any:
@@ -200,7 +174,7 @@ def read_user_by_id(
 
 @router.patch(
     "/{user_id}",
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+    dependencies=[Depends(RoleChecker([Role.ADMIN]))],
     response_model=UserPublic,
 )
 def update_user(
@@ -234,9 +208,7 @@ def update_user(
     return db_user
 
 
-@router.delete(
-    "/{user_id}", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
-)
+@router.delete("/{user_id}", dependencies=[Depends(RoleChecker([Role.ADMIN]))])
 def delete_user(
     session: SessionDep, current_user: CurrentUser, user_id: uuid.UUID
 ) -> Message:
