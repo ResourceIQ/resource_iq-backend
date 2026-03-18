@@ -1,13 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException,Depends
 
 from app.api.score.score_schema import BestFitInput, ScoreProfile
 from app.api.score.score_service import ScoreService
-from app.utils.deps import SessionDep
+from app.utils.deps import SessionDep,RoleChecker
+from app.api.user.user_model import Role
 
 router = APIRouter(prefix="/score", tags=["score"])
 
 
-@router.post("/best-fits")
+@router.post("/best-fits", dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
 def get_best_fits(
     db: SessionDep,
     best_fit_input: BestFitInput,
