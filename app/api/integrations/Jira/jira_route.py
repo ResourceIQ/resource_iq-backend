@@ -14,8 +14,10 @@ from app.api.integrations.Jira.jira_schema import (
     JiraAuthConnectResponse,
     JiraCreateIssueRequest,
     JiraCreateIssueResponse,
+    JiraIssueDetailResponse,
     JiraIssueTypeStatusResponse,
     JiraIssueTypeStatusUpdateRequest,
+    JiraLiveStatsResponse,
     JiraSyncRequest,
     JiraSyncResponse,
 )
@@ -220,7 +222,23 @@ async def get_issue_types(session: SessionDep) -> list[dict[str, Any]]:
         )
 
 
-@router.post("/issues", response_model=JiraCreateIssueResponse,dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+
+@router.get("/issues/{issue_key}", response_model=JiraIssueDetailResponse,dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+async def get_issue(
+    session: SessionDep,
+    issue_key: str,
+) -> JiraIssueDetailResponse:
+    """Fetch a single Jira issue by its key."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_issue(issue_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch issue: {str(e)}")
+
+
+@router.post("/issues", response_model=JiraCreateIssueResponse)
 async def create_issue(
     session: SessionDep,
     request: JiraCreateIssueRequest,
@@ -279,3 +297,22 @@ async def sync_issues(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+
+@router.get("/live/stats", response_model=JiraLiveStatsResponse)
+async def get_jira_live_stats(
+    session: SessionDep,
+    project_keys: list[str] | None = Query(
+        default=None, description="Optional project keys to filter stats"
+    ),
+) -> JiraLiveStatsResponse:
+    """Fetch real-time task statistics directly from Jira across projects."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_live_task_stats(project_keys=project_keys)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch live Jira stats: {str(e)}"
+        )

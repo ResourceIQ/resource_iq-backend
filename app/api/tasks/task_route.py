@@ -16,7 +16,7 @@ from app.api.tasks.task_scheduler import (
     schedule_embedding_task,
     unschedule_embedding_task,
 )
-from app.api.tasks.task_service import enqueue_embedding_task
+from app.api.tasks.task_service import enqueue_embedding_task, enqueue_kg_build_task
 from app.api.tasks.task_store import RedisTaskStore
 from app.api.user.user_model import Role
 from app.utils.deps import RoleChecker
@@ -25,6 +25,21 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
 class EmbeddingTaskResponse(BaseModel):
+    task_id: str
+    status: str
+
+
+class KGTaskRequest(BaseModel):
+    author_login: str | None = None
+    batch_size: int = Field(
+        default=50,
+        ge=1,
+        le=500,
+        description="Max PRs to process per author during KG build",
+    )
+
+
+class KGTaskResponse(BaseModel):
     task_id: str
     status: str
 
@@ -52,6 +67,22 @@ async def trigger_embedding_task(
     req = request or SyncAllRequest()
     task_id = enqueue_embedding_task(background_tasks, req)
     return EmbeddingTaskResponse(task_id=task_id, status="queued")
+
+
+@router.post("/kg/build", response_model=KGTaskResponse)
+async def trigger_kg_build_task(
+    background_tasks: BackgroundTasks,
+    request: KGTaskRequest | None = None,
+) -> KGTaskResponse:
+    """Queue an async KG build task and return a task id."""
+
+    req = request or KGTaskRequest()
+    task_id = enqueue_kg_build_task(
+        background_tasks=background_tasks,
+        author_login=req.author_login,
+        batch_size=req.batch_size,
+    )
+    return KGTaskResponse(task_id=task_id, status="queued")
 
 
 @router.get("/status/{task_id}",dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])

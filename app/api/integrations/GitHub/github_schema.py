@@ -68,9 +68,29 @@ class GitHubRepository(BaseModel):
     stargazers_count: int = 0
     forks_count: int = 0
     open_issues_count: int = 0
+    branch_count: int = 0
+    pull_request_count: int = 0
+    open_pr_count: int = 0
+    closed_pr_count: int = 0
+    merged_pr_count: int = 0
+    stale_pr_count: int = 0
+    real_issue_count: int = 0
     created_at: datetime | None = None
     updated_at: datetime | None = None
     pushed_at: datetime | None = None
+    last_commit_at: datetime | None = None
+    latest_workflow_status: str | None = None  # success, failure, in_progress, etc.
+    languages: dict[str, int] = Field(default_factory=dict)
+    contributors: list["GitHubContributor"] = Field(default_factory=list)
+
+
+class GitHubContributor(BaseModel):
+    """Schema for a GitHub Contributor."""
+
+    login: str
+    id: int
+    avatar_url: HttpUrl | None = None
+    contributions: int = 0
 
 
 class GitHubSyncRequest(BaseModel):

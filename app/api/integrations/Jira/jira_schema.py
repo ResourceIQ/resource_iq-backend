@@ -153,6 +153,18 @@ class JiraAssignIssueRequest(BaseModel):
     )
 
 
+class JiraIssueDetailResponse(BaseModel):
+    """Response for fetching a single Jira issue's details."""
+
+    issue_key: str
+    issue_url: str
+    summary: str
+    description: str | None = None
+    assigned_to: str | None = None
+    status: str
+    issue_type: str
+
+
 class JiraAssignIssueResponse(BaseModel):
     """Response after assigning a Jira issue."""
 
@@ -160,3 +172,31 @@ class JiraAssignIssueResponse(BaseModel):
     assigned_to: str | None = Field(
         default=None, description="Display name of the new assignee"
     )
+
+
+class JiraProjectStats(BaseModel):
+    """Real-time task count for a single Jira project."""
+
+    key: str
+    name: str
+    task_count: int
+
+
+class JiraAssigneeStats(BaseModel):
+    """Real-time task count for a single Jira assignee."""
+
+    account_id: str
+    display_name: str
+    avatar_url: HttpUrl | None = None
+    task_count: int
+
+
+class JiraLiveStatsResponse(BaseModel):
+    """Aggregated real-time Jira task statistics."""
+
+    total_active_tasks: int
+    unassigned_tasks: int
+    tasks_by_project: list[JiraProjectStats]
+    tasks_by_status: dict[str, int]
+    tasks_by_priority: dict[str, int]
+    top_assignees: list[JiraAssigneeStats]
