@@ -1,4 +1,3 @@
-
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends
@@ -27,7 +26,9 @@ def _run_kg_build(author_login: str | None, batch_size: int) -> None:
         logger.info("Background KG build complete: %s", result)
 
 
-@router.post("/graph/build",dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+@router.post(
+    "/graph/build", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
+)
 async def build_knowledge_graph(
     background_tasks: BackgroundTasks,
     author_login: str | None = None,  # optional: rebuild for one author only

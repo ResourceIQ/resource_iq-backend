@@ -17,7 +17,9 @@ from app.utils.deps import RoleChecker, SessionDep
 router = APIRouter(prefix="/vectors", tags=["Vector Embeddings"])
 
 
-@router.post("/sync/author",dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+@router.post(
+    "/sync/author", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
+)
 async def sync_author_vectors(
     session: SessionDep,
     author_login: str,
@@ -39,7 +41,11 @@ async def sync_author_vectors(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/sync/all", response_model=SyncAllResponse,dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+@router.post(
+    "/sync/all",
+    response_model=SyncAllResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def sync_all_vectors(
     session: SessionDep,
     request: SyncAllRequest | None = None,

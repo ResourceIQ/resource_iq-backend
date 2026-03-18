@@ -8,7 +8,9 @@ from app.utils.deps import RoleChecker, SessionDep
 router = APIRouter(prefix="/score", tags=["score"])
 
 
-@router.post("/best-fits", dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+@router.post(
+    "/best-fits", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
+)
 def get_best_fits(
     db: SessionDep,
     best_fit_input: BestFitInput,
