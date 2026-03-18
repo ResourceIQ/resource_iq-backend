@@ -18,6 +18,13 @@ class PrScoreInfo(SQLModel):
     match_percentage: float = 0.0
 
 
+class IssueScoreInfo(SQLModel):
+    issue_key: str
+    issue_summary: str = ""
+    issue_url: str = ""
+    match_percentage: float = 0.0
+
+
 class KGMatchInfo(SQLModel):
     category: str
     value: str
@@ -34,6 +41,7 @@ class ScoreProfile(SQLModel):
     jira_issue_score: float = 0.0
     pr_info: list[PrScoreInfo] = Field(default_factory=list)
     kg_matches: list[KGMatchInfo] = Field(default_factory=list)
+    issue_info: list[IssueScoreInfo] = Field(default_factory=list)
     issue_links: list[str] = Field(default_factory=list)
 
     @computed_field  # type: ignore[prop-decorator]
