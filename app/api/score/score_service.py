@@ -233,13 +233,15 @@ class ScoreService:
 
     def _resolve_jira_browse_url(self) -> str:
         """Resolve the browsable Jira site URL from OAuth token, org integration, or settings."""
-        token = self.db.query(JiraOAuthToken.jira_site_url).first()
+        token: JiraOAuthToken | None = self.db.query(JiraOAuthToken).first()
         if token and token.jira_site_url:
-            return token.jira_site_url.rstrip("/")
+            return str(token.jira_site_url).rstrip("/")
 
-        integration = self.db.query(JiraOrgIntegration.jira_url).first()
+        integration: JiraOrgIntegration | None = (
+            self.db.query(JiraOrgIntegration).first()
+        )
         if integration and integration.jira_url:
-            return integration.jira_url.rstrip("/")
+            return str(integration.jira_url).rstrip("/")
 
         return (settings.JIRA_URL or "").rstrip("/")
 
