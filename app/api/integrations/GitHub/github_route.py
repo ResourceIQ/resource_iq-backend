@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 import jwt
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
 from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
@@ -20,8 +20,9 @@ from app.api.integrations.GitHub.github_schema import (
     PullRequestContent,
 )
 from app.api.integrations.GitHub.github_service import GithubIntegrationService
+from app.api.user.user_model import Role
 from app.core.config import settings
-from app.utils.deps import SessionDep
+from app.utils.deps import RoleChecker, SessionDep
 
 router = APIRouter(prefix="/github", tags=["github"])
 logger = logging.getLogger(__name__)
@@ -101,7 +102,9 @@ def _discover_and_store_installation(
 # ── Connection / Status Endpoints ────────────────────────────────
 
 
-@router.get("/auth/connect")
+@router.get(
+    "/auth/connect", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
+)
 async def connect_github(
     session: SessionDep,
 ) -> GitHubAppConnectResponse | GitHubAppConnectionStatus:
@@ -147,7 +150,9 @@ async def connect_github(
     )
 
 
-@router.get("/auth/callback")
+@router.get(
+    "/auth/callback", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
+)
 async def github_app_setup_callback(
     session: SessionDep,
     installation_id: int | None = Query(default=None),
@@ -197,7 +202,11 @@ async def github_app_setup_callback(
     )
 
 
-@router.get("/auth/status", response_model=GitHubAppConnectionStatus)
+@router.get(
+    "/auth/status",
+    response_model=GitHubAppConnectionStatus,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def get_github_auth_status(session: SessionDep) -> GitHubAppConnectionStatus:
     """
     Return GitHub App connection status.
@@ -230,7 +239,10 @@ async def get_github_auth_status(session: SessionDep) -> GitHubAppConnectionStat
     )
 
 
-@router.post("/auth/disconnect")
+@router.post(
+    "/auth/disconnect",
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def disconnect_github(session: SessionDep) -> dict[str, str]:
     """Remove the GitHub App installation record from the database."""
     integrations = session.query(GithubOrgIntBaseModel).all()
@@ -243,7 +255,11 @@ async def disconnect_github(session: SessionDep) -> dict[str, str]:
 # ── Repository & Analysis Endpoints ─────────────────────────────
 
 
-@router.get("/repositories", response_model=list[GitHubRepository])
+@router.get(
+    "/repositories",
+    response_model=list[GitHubRepository],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def get_repositories(session: SessionDep) -> list[GitHubRepository]:
     """Get all repositories accessible to the GitHub App installation."""
     try:
@@ -256,7 +272,11 @@ async def get_repositories(session: SessionDep) -> list[GitHubRepository]:
         )
 
 
-@router.get("/org/repos/live", response_model=list[GitHubRepository])
+@router.get(
+    "/org/repos/live",
+    response_model=list[GitHubRepository],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def get_live_repositories(session: SessionDep) -> list[GitHubRepository]:
     """Get all repositories with live stats (branch and PR counts)."""
     try:
@@ -269,7 +289,10 @@ async def get_live_repositories(session: SessionDep) -> list[GitHubRepository]:
         )
 
 
-@router.get("/repositories/{repo_name}/contributors")
+@router.get(
+    "/repositories/{repo_name}/contributors",
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def get_repo_contributors(
     session: SessionDep,
     repo_name: str,
@@ -284,7 +307,10 @@ async def get_repo_contributors(
         )
 
 
-@router.get("/repositories/{repo_name}/pulls")
+@router.get(
+    "/repositories/{repo_name}/pulls",
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def get_repo_pull_requests(
     session: SessionDep,
     repo_name: str,
@@ -303,7 +329,11 @@ async def get_repo_pull_requests(
         )
 
 
-@router.post("/sync", response_model=GitHubSyncResponse)
+@router.post(
+    "/sync",
+    response_model=GitHubSyncResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def sync_github(
     session: SessionDep,
     request: GitHubSyncRequest,
@@ -324,7 +354,9 @@ async def sync_github(
 # ── Existing GitHub App Endpoints ────────────────────────────────
 
 
-@router.get("/get_developers")
+@router.get(
+    "/get_developers", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
+)
 async def get_developers(session: SessionDep) -> list[GitHubUser]:
     try:
         github_manager = GithubIntegrationService(session)
@@ -333,7 +365,10 @@ async def get_developers(session: SessionDep) -> list[GitHubUser]:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/get_closed_prs_context_per_author")
+@router.post(
+    "/get_closed_prs_context_per_author",
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def get_closed_prs_context_per_author(
     session: SessionDep, author: GitHubUser
 ) -> list[PullRequestContent]:
@@ -344,7 +379,10 @@ async def get_closed_prs_context_per_author(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/get_closed_prs_context_all_authors")
+@router.get(
+    "/get_closed_prs_context_all_authors",
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def get_closed_prs_context_all_authors(
     session: SessionDep,
 ) -> dict[str, list[PullRequestContent]]:
