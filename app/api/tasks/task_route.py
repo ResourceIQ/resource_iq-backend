@@ -6,11 +6,9 @@ import asyncio
 import json
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException,Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from app.utils.deps import RoleChecker
-from app.api.user.user_model import Role
 
 from app.api.embedding.embedding_sync_service import SyncAllRequest
 from app.api.tasks.task_scheduler import (
@@ -20,6 +18,8 @@ from app.api.tasks.task_scheduler import (
 )
 from app.api.tasks.task_service import enqueue_embedding_task, enqueue_kg_build_task
 from app.api.tasks.task_store import RedisTaskStore
+from app.api.user.user_model import Role
+from app.utils.deps import RoleChecker
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -57,7 +57,11 @@ class ScheduleEmbeddingTaskResponse(BaseModel):
     next_run_time: str | None = None
 
 
-@router.post("/embeddings", response_model=EmbeddingTaskResponse,dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+@router.post(
+    "/embeddings",
+    response_model=EmbeddingTaskResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def trigger_embedding_task(
     background_tasks: BackgroundTasks,
     request: SyncAllRequest | None = None,
@@ -69,7 +73,11 @@ async def trigger_embedding_task(
     return EmbeddingTaskResponse(task_id=task_id, status="queued")
 
 
-@router.post("/kg/build", response_model=KGTaskResponse,dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+@router.post(
+    "/kg/build",
+    response_model=KGTaskResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def trigger_kg_build_task(
     background_tasks: BackgroundTasks,
     request: KGTaskRequest | None = None,
@@ -85,7 +93,10 @@ async def trigger_kg_build_task(
     return KGTaskResponse(task_id=task_id, status="queued")
 
 
-@router.get("/status/{task_id}",dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+@router.get(
+    "/status/{task_id}",
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def stream_task_status(task_id: str) -> StreamingResponse:
     """Stream task progress and logs as Server-Sent Events."""
 
@@ -147,7 +158,11 @@ async def stream_task_status(task_id: str) -> StreamingResponse:
     )
 
 
-@router.post("/embeddings/schedule", response_model=ScheduleEmbeddingTaskResponse,dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+@router.post(
+    "/embeddings/schedule",
+    response_model=ScheduleEmbeddingTaskResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def create_embedding_schedule(
     request: ScheduleEmbeddingTaskRequest,
 ) -> ScheduleEmbeddingTaskResponse:
@@ -160,7 +175,10 @@ async def create_embedding_schedule(
     return ScheduleEmbeddingTaskResponse(**schedule)
 
 
-@router.get("/embeddings/schedule/{schedule_id}",dependencies=[Depends(RoleChecker([Role.ADMIN,Role.MODERATOR]))])
+@router.get(
+    "/embeddings/schedule/{schedule_id}",
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def get_embedding_schedule(schedule_id: str) -> dict[str, Any]:
     """Return scheduler metadata for a specific schedule id."""
 
