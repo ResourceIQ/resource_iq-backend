@@ -8,6 +8,7 @@ from torch import cosine_similarity
 
 from app.api.embedding.embedding_model import GitHubPRVector
 from app.api.embedding.embedding_service import VectorEmbeddingService
+from app.api.integrations.Jira.jira_service import JiraIntegrationService
 from app.api.knowledge_graph.kg_extractor import ExtractedEntities, LLMEntityExtractor
 from app.api.knowledge_graph.kg_schema import KGExpertiseSummary
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
@@ -49,6 +50,10 @@ class ScoreService:
         "tools": 2,
         "languages": 3,
     }
+    # Availability score drops linearly as workload increases.
+    # Workloads at or above this threshold are treated as fully busy.
+    AVAILABILITY_WORKLOAD_THRESHOLD = 10
+    AVAILABILITY_MAX_SCORE = 200.0
 
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -238,6 +243,43 @@ class ScoreService:
         expertise_summary = self.kg_service.get_resource_expertise_summary(github_id)
         return self._score_knowledge_graph_alignment(task_entities, expertise_summary)
 
+    @classmethod
+    def _calculate_availability_score(cls, total_workload: int) -> float:
+        """Convert current workload into an availability score.
+
+        Lower workload means higher availability. Score is clamped to
+        [0, AVAILABILITY_MAX_SCORE] and decreases linearly up to the
+        configured workload threshold.
+        """
+        clamped_workload = max(0, total_workload)
+        if clamped_workload >= cls.AVAILABILITY_WORKLOAD_THRESHOLD:
+            return 0.0
+
+        availability_ratio = 1.0 - (
+            clamped_workload / cls.AVAILABILITY_WORKLOAD_THRESHOLD
+        )
+        return round(availability_ratio * cls.AVAILABILITY_MAX_SCORE, 2)
+
+    def _get_realtime_jira_workload_map(
+        self, profiles: list[ResourceProfile]
+    ) -> dict[str, int]:
+        """Fetch live Jira workload counts keyed by Jira account id."""
+        jira_account_ids = [
+            profile.jira_account_id for profile in profiles if profile.jira_account_id
+        ]
+        if not jira_account_ids:
+            return {}
+
+        try:
+            jira_service = JiraIntegrationService(self.db)
+            return jira_service.get_live_assignee_workload_map(jira_account_ids)
+        except Exception:
+            logger.warning(
+                "Falling back to persisted workload for availability scoring.",
+                exc_info=True,
+            )
+            return {}
+
     def get_best_fits(self, best_fit_input: BestFitInput) -> list[ScoreProfile]:
         """
         Get the top N Resources best suited for the given task.
@@ -259,6 +301,7 @@ class ScoreService:
         )[0]
         task_entities = self._extract_task_entities(best_fit_input)
         logger.info("Score task entities extracted: %s", task_entities.to_dict())
+        live_jira_workload_by_account = self._get_realtime_jira_workload_map(profiles)
 
         # Calculate scores for each profile
         scores: list[ScoreProfile] = []
@@ -267,6 +310,26 @@ class ScoreService:
             user_name = self.db.execute(stmt).scalar() or "Unknown"
             score_profile = ScoreProfile(
                 user_id=profile.user_id, user_name=user_name, position=profile.position
+            )
+            live_jira_workload = 0
+            if profile.jira_account_id:
+                live_jira_workload = live_jira_workload_by_account.get(
+                    profile.jira_account_id, 0
+                )
+
+            # Use live Jira workload when available, otherwise fall back to persisted
+            # value to avoid dropping availability scoring when Jira is temporarily down.
+            if (
+                profile.jira_account_id
+                and profile.jira_account_id in live_jira_workload_by_account
+            ):
+                workload_for_availability = live_jira_workload
+            else:
+                workload_for_availability = profile.total_workload
+
+            score_profile.live_jira_workload = live_jira_workload
+            score_profile.availability_score = self._calculate_availability_score(
+                workload_for_availability
             )
             if not profile.github_id:
                 continue
