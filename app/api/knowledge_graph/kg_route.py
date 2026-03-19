@@ -1,11 +1,20 @@
 import logging
+from typing import Any, cast
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from sqlmodel import Session
 
+from app.api.knowledge_graph.kg_extractor import LLMEntityExtractor
 from app.api.knowledge_graph.kg_build_service import KGBuildService
+from app.api.knowledge_graph.kg_schema import (
+    KGLearningIntentEntities,
+    KGLearningIntentRequest,
+    KGLearningIntentResponse,
+)
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
+from app.api.profiles.profile_model import ResourceProfile
 from app.db.session import engine
+from app.utils.deps import CurrentUser, SessionDep
 
 router = APIRouter(prefix="/kg", tags=["knowledge_graph"])
 
@@ -47,3 +56,70 @@ async def build_knowledge_graph(
         "message": "KG build running in background. Check server logs for progress.",
         "batch_size": batch_size,
     }
+
+
+@router.post("/intent/me", response_model=KGLearningIntentResponse)
+async def ingest_my_learning_intent(
+    session: SessionDep,
+    current_user: CurrentUser,
+    request: KGLearningIntentRequest,
+) -> KGLearningIntentResponse:
+    """Ingest current user's learning intent into the knowledge graph."""
+    profile = (
+        session.query(ResourceProfile)
+        .filter(cast(Any, ResourceProfile.user_id == current_user.id))
+        .first()
+    )
+
+    if not profile or profile.github_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Connect your GitHub profile before submitting learning intent.",
+        )
+
+    extractor = LLMEntityExtractor()
+    entities = extractor.extract(
+        files=[],
+        commit_messages=[],
+        title=request.intent,
+        body=request.intent,
+        labels=[],
+    )
+
+    if entities.is_empty():
+        raise HTTPException(
+            status_code=422,
+            detail="Could not map intent to known domains/skills/tools. Try a more specific description.",
+        )
+
+    graph_service = KnowledgeGraphService()
+    counts = graph_service.upsert_resource_learning_intent(
+        github_id=profile.github_id,
+        github_login=profile.github_login,
+        entities=entities,
+    )
+
+    logger.info(
+        "Stored KG intent for user_id=%s github_id=%s domains=%d skills=%d",
+        current_user.id,
+        profile.github_id,
+        counts["wants_to_work_in_domains"],
+        counts["wants_to_learn_skills"],
+    )
+
+    return KGLearningIntentResponse(
+        github_id=profile.github_id,
+        github_login=profile.github_login,
+        entities=KGLearningIntentEntities(
+            languages=entities.languages,
+            frameworks=entities.frameworks,
+            domains=entities.domains,
+            skills=entities.skills,
+            tools=entities.tools,
+        ),
+        wants_to_work_in_domains=counts["wants_to_work_in_domains"],
+        wants_to_learn_skills=counts["wants_to_learn_skills"],
+        wants_to_learn_languages=counts["wants_to_learn_languages"],
+        wants_to_learn_frameworks=counts["wants_to_learn_frameworks"],
+        wants_to_learn_tools=counts["wants_to_learn_tools"],
+    )
