@@ -932,6 +932,60 @@ class JiraIntegrationService:
             top_assignees=top_assignees,
         )
 
+    def get_live_assignee_workload_map(
+        self, assignee_account_ids: list[str]
+    ) -> dict[str, int]:
+        """Return real-time active Jira task counts for the provided assignees.
+
+        This method is intended for capacity-aware ranking during best-fit scoring.
+        It fetches non-done issues once and aggregates counts only for the supplied
+        Jira account IDs.
+        """
+        account_ids = [account_id for account_id in assignee_account_ids if account_id]
+        if not account_ids:
+            return {}
+
+        tracked_ids = set(account_ids)
+        workload_by_assignee = dict.fromkeys(tracked_ids, 0)
+
+        client = self.get_jira_client()
+        jql = "statusCategory != Done"
+        fields = ["assignee"]
+
+        batch_size = 100
+        start_at = 0
+
+        while True:
+            issues = client.search_issues(
+                jql,
+                startAt=start_at,
+                maxResults=batch_size,
+                fields=fields,
+            )
+
+            if not issues:
+                break
+
+            for issue in issues:
+                assignee = getattr(issue.fields, "assignee", None)
+                if not assignee:
+                    continue
+                account_id = getattr(assignee, "accountId", None)
+                if account_id in tracked_ids:
+                    workload_by_assignee[account_id] += 1
+
+            if len(issues) < batch_size:
+                break
+
+            start_at += batch_size
+            if start_at >= 1000:
+                logger.warning(
+                    "Reached 1000 issue limit for assignee workload map; results may be partial."
+                )
+                break
+
+        return workload_by_assignee
+
     def _generate_issue_context(self, issue: JiraIssueContent) -> str:
         """
         Generate a context string from issue for NLP/embedding processing.

@@ -1,7 +1,7 @@
 import logging
 from typing import Any, cast
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlmodel import Session
 
 from app.api.knowledge_graph.kg_extractor import LLMEntityExtractor
@@ -13,8 +13,9 @@ from app.api.knowledge_graph.kg_schema import (
 )
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
 from app.api.profiles.profile_model import ResourceProfile
+from app.api.user.user_model import Role
 from app.db.session import engine
-from app.utils.deps import CurrentUser, SessionDep
+from app.utils.deps import CurrentUser, RoleChecker, SessionDep
 
 router = APIRouter(prefix="/kg", tags=["knowledge_graph"])
 
@@ -33,7 +34,9 @@ def _run_kg_build(author_login: str | None, batch_size: int) -> None:
         logger.info("Background KG build complete: %s", result)
 
 
-@router.post("/graph/build")
+@router.post(
+    "/graph/build", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
+)
 async def build_knowledge_graph(
     background_tasks: BackgroundTasks,
     author_login: str | None = None,  # optional: rebuild for one author only

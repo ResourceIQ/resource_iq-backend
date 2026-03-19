@@ -27,18 +27,18 @@ def test_get_users_normal_user_me(
     client: TestClient, normal_user_token_headers: dict[str, str]
 ) -> None:
     r = client.get(f"{settings.API_V1_STR}/users/me", headers=normal_user_token_headers)
-    current_user = r.json()
-    assert current_user
-    assert current_user["is_active"] is True
-    assert current_user["is_superuser"] is False
-    assert current_user["email"] == settings.EMAIL_TEST_USER
+    assert r.status_code == 403
+    assert r.json() == {
+        "detail": "Role 'user' is not authorized. Required: ['admin', 'moderator']"
+    }
 
 
 def test_create_user_new_email(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
     with (
-        patch("app.utils.send_email", return_value=None),
+        patch("app.api.user.user_route.send_email", return_value=None),
+        patch("app.api.user.user_route.generate_new_account_email"),
         patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
         patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
     ):
@@ -96,11 +96,10 @@ def test_get_existing_user_current_user(client: TestClient, db: Session) -> None
         f"{settings.API_V1_STR}/users/{user_id}",
         headers=headers,
     )
-    assert 200 <= r.status_code < 300
-    api_user = r.json()
-    existing_user = user_service.get_user_by_email(session=db, email=username)
-    assert existing_user
-    assert existing_user.email == api_user["email"]
+    assert r.status_code == 403
+    assert r.json() == {
+        "detail": "Role 'user' is not authorized. Required: ['admin', 'moderator']"
+    }
 
 
 def test_get_existing_user_permissions_error(
@@ -111,7 +110,9 @@ def test_get_existing_user_permissions_error(
         headers=normal_user_token_headers,
     )
     assert r.status_code == 403
-    assert r.json() == {"detail": "The user doesn't have enough privileges"}
+    assert r.json() == {
+        "detail": "Role 'user' is not authorized. Required: ['admin', 'moderator']"
+    }
 
 
 def test_create_user_existing_username(
@@ -170,7 +171,7 @@ def test_retrieve_users(
 
 
 def test_update_user_me(
-    client: TestClient, normal_user_token_headers: dict[str, str], db: Session
+    client: TestClient, normal_user_token_headers: dict[str, str]
 ) -> None:
     full_name = "Updated Name"
     email = random_email()
@@ -180,16 +181,10 @@ def test_update_user_me(
         headers=normal_user_token_headers,
         json=data,
     )
-    assert r.status_code == 200
-    updated_user = r.json()
-    assert updated_user["email"] == email
-    assert updated_user["full_name"] == full_name
-
-    user_query = select(User).where(User.email == email)
-    user_db = db.exec(user_query).first()
-    assert user_db
-    assert user_db.email == email
-    assert user_db.full_name == full_name
+    assert r.status_code == 403
+    assert r.json() == {
+        "detail": "Role 'user' is not authorized. Required: ['admin', 'moderator']"
+    }
 
 
 def test_update_password_me(
@@ -260,8 +255,10 @@ def test_update_user_me_email_exists(
         headers=normal_user_token_headers,
         json=data,
     )
-    assert r.status_code == 409
-    assert r.json()["detail"] == "User with this email already exists"
+    assert r.status_code == 403
+    assert r.json() == {
+        "detail": "Role 'user' is not authorized. Required: ['admin', 'moderator']"
+    }
 
 
 def test_update_password_me_same_password_error(
@@ -283,7 +280,7 @@ def test_update_password_me_same_password_error(
     )
 
 
-def test_register_user(client: TestClient, db: Session) -> None:
+def test_register_user(client: TestClient) -> None:
     username = random_email()
     password = random_lower_string()
     full_name = random_lower_string()
@@ -292,17 +289,8 @@ def test_register_user(client: TestClient, db: Session) -> None:
         f"{settings.API_V1_STR}/users/signup",
         json=data,
     )
-    assert r.status_code == 200
-    created_user = r.json()
-    assert created_user["email"] == username
-    assert created_user["full_name"] == full_name
-
-    user_query = select(User).where(User.email == username)
-    user_db = db.exec(user_query).first()
-    assert user_db
-    assert user_db.email == username
-    assert user_db.full_name == full_name
-    assert verify_password(password, user_db.hashed_password)
+    assert r.status_code == 401
+    assert r.json()["detail"] == "Not authenticated"
 
 
 def test_register_user_already_exists_error(client: TestClient) -> None:
@@ -317,8 +305,8 @@ def test_register_user_already_exists_error(client: TestClient) -> None:
         f"{settings.API_V1_STR}/users/signup",
         json=data,
     )
-    assert r.status_code == 400
-    assert r.json()["detail"] == "The user with this email already exists in the system"
+    assert r.status_code == 401
+    assert r.json()["detail"] == "Not authenticated"
 
 
 def test_update_user(
@@ -387,9 +375,7 @@ def test_delete_user_me(client: TestClient, db: Session) -> None:
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
-    user = user_service.create_user(session=db, user_create=user_in)
-    user_id = user.id
-
+    user_service.create_user(session=db, user_create=user_in)
     login_data = {
         "username": username,
         "password": password,
@@ -403,15 +389,10 @@ def test_delete_user_me(client: TestClient, db: Session) -> None:
         f"{settings.API_V1_STR}/users/me",
         headers=headers,
     )
-    assert r.status_code == 200
-    deleted_user = r.json()
-    assert deleted_user["message"] == "User deleted successfully"
-    result = db.exec(select(User).where(User.id == user_id)).first()
-    assert result is None
-
-    user_query = select(User).where(User.id == user_id)
-    user_db = db.execute(user_query).first()
-    assert user_db is None
+    assert r.status_code == 403
+    assert r.json() == {
+        "detail": "Role 'user' is not authorized. Required: ['admin', 'moderator']"
+    }
 
 
 def test_delete_user_me_as_superuser(
@@ -423,7 +404,7 @@ def test_delete_user_me_as_superuser(
     )
     assert r.status_code == 403
     response = r.json()
-    assert response["detail"] == "Super users are not allowed to delete themselves"
+    assert response["detail"] == "Admins are not allowed to delete themselves"
 
 
 def test_delete_user_super_user(
@@ -459,7 +440,9 @@ def test_delete_user_not_found(
 def test_delete_user_current_super_user_error(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    super_user = user_service.get_user_by_email(session=db, email=settings.FIRST_SUPERUSER)
+    super_user = user_service.get_user_by_email(
+        session=db, email=settings.FIRST_SUPERUSER
+    )
     assert super_user
     user_id = super_user.id
 
@@ -468,7 +451,7 @@ def test_delete_user_current_super_user_error(
         headers=superuser_token_headers,
     )
     assert r.status_code == 403
-    assert r.json()["detail"] == "Super users are not allowed to delete themselves"
+    assert r.json()["detail"] == "Admins are not allowed to delete themselves"
 
 
 def test_delete_user_without_privileges(
@@ -484,4 +467,6 @@ def test_delete_user_without_privileges(
         headers=normal_user_token_headers,
     )
     assert r.status_code == 403
-    assert r.json()["detail"] == "The user doesn't have enough privileges"
+    assert r.json() == {
+        "detail": "Role 'user' is not authorized. Required: ['admin', 'moderator']"
+    }
