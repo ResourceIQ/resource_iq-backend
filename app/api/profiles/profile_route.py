@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, cast
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.profiles.profile_model import ResourceProfile
 from app.api.profiles.profile_schema import (
@@ -17,7 +17,8 @@ from app.api.profiles.profile_schema import (
     UpdateSkillsRequest,
 )
 from app.api.profiles.profile_service import ProfileService
-from app.utils.deps import CurrentUser, SessionDep
+from app.api.user.user_model import Role
+from app.utils.deps import CurrentUser, RoleChecker, SessionDep
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
@@ -29,7 +30,7 @@ def _to_response(profile: ResourceProfile) -> ResourceProfileResponse:
         user_id=profile.user_id,
         phone_number=profile.phone_number,
         address=profile.address,
-        position=profile.position,
+        position_id=profile.position_id,
         jira_account_id=profile.jira_account_id,
         jira_display_name=profile.jira_display_name,
         jira_email=profile.jira_email,
@@ -75,7 +76,11 @@ async def get_my_profile(
     return _to_response(profile)
 
 
-@router.post("/", response_model=ResourceProfileResponse)
+@router.post(
+    "/",
+    response_model=ResourceProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def create_profile(
     session: SessionDep, request: ResourceProfileCreate
 ) -> ResourceProfileResponse:
@@ -91,8 +96,18 @@ async def create_profile(
             status_code=400, detail="Profile already exists for this user"
         )
 
+    if request.position_id is not None:
+        from app.api.profiles.position_model import JobPosition
+
+        position = session.get(JobPosition, request.position_id)
+        if not position:
+            raise HTTPException(
+                status_code=400, detail="Invalid position_id: Job position not found"
+            )
+
     profile = ResourceProfile(
         user_id=request.user_id,
+        position_id=request.position_id,
         skills=request.skills,
         domains=request.domains,
     )
@@ -103,7 +118,11 @@ async def create_profile(
     return _to_response(profile)
 
 
-@router.get("/", response_model=list[ResourceProfileResponse])
+@router.get(
+    "/",
+    response_model=list[ResourceProfileResponse],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def list_profiles(
     session: SessionDep,
     has_jira: bool | None = Query(default=None, description="Filter by Jira connected"),
@@ -129,7 +148,11 @@ async def list_profiles(
     return [_to_response(p) for p in profiles]
 
 
-@router.get("/workloads", response_model=list[ProfileWorkload])
+@router.get(
+    "/workloads",
+    response_model=list[ProfileWorkload],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def get_all_workloads(
     session: SessionDep,
     sort_by: str = Query(default="total", description="Sort by: total, jira, github"),
@@ -347,6 +370,16 @@ async def update_skills(
 
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
+
+    if request.position_id is not None:
+        from app.api.profiles.position_model import JobPosition
+
+        position = session.get(JobPosition, request.position_id)
+        if not position:
+            raise HTTPException(
+                status_code=400, detail="Invalid position_id: Job position not found"
+            )
+        profile.position_id = request.position_id
 
     if request.skills is not None:
         profile.skills = ",".join(request.skills)

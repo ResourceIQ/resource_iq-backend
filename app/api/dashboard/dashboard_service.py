@@ -142,7 +142,7 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
     # ---- 5. Resource Allocation by Team (grouped by position) ----
     team_map: dict[str, int] = {}
     for p in profiles:
-        team = p.position or "Unassigned"
+        team = p.position.name if p.position else "Unassigned"
         team_map[team] = team_map.get(team, 0) + 1
 
     allocation = [

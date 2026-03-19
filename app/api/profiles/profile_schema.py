@@ -12,6 +12,7 @@ from app.api.integrations.Jira.jira_schema import JiraUser
 class ResourceProfileBase(BaseModel):
     """Base schema for resource profile."""
 
+    position_id: int | None = None
     skills: str | None = None
     domains: str | None = None
 
@@ -50,7 +51,7 @@ class ResourceProfileResponse(BaseModel):
     user_id: uuid.UUID
     phone_number: str | None = None
     address: str | None = None
-    position: str | None = None
+    position_id: int | None = None
 
     # Jira
 
@@ -99,6 +100,7 @@ class ProfileWorkload(BaseModel):
 class UpdateSkillsRequest(BaseModel):
     """Request to update skills/domains."""
 
+    position_id: int | None = None
     skills: list[str] | None = None
     domains: list[str] | None = None
 
