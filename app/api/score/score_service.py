@@ -309,7 +309,9 @@ class ScoreService:
             stmt = select(User.full_name).where(User.id == profile.user_id)
             user_name = self.db.execute(stmt).scalar() or "Unknown"
             score_profile = ScoreProfile(
-                user_id=profile.user_id, user_name=user_name, position=profile.position
+                user_id=profile.user_id,
+                user_name=user_name,
+                position=profile.position.name if profile.position else None,
             )
             live_jira_workload = 0
             if profile.jira_account_id:
@@ -373,16 +375,10 @@ class ScoreService:
 
 
     def get_job_positions(self):
-        # 1. Create the search command
-        query = select(ResourceProfile.position)
+        """Fetch all unique job position names."""
+        from app.api.profiles.position_model import JobPosition
 
-        # 2. Make sure results are unique and not empty
-        query = query.distinct().where(ResourceProfile.position != None)
-
-        # 3. Ask the database to run the search
+        query = select(JobPosition.name)
         raw_results = self.db.execute(query)
-
-        # 4. Convert the database rows into a simple list
         clean_list = raw_results.scalars().all()
-
         return clean_list
