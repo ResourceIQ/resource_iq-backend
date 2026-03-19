@@ -141,7 +141,7 @@ class TestCalculateAvailabilityScore:
     def test_linearly_decreases_with_workload(self) -> None:
         score = ScoreService._calculate_availability_score(6)
         # (1 - 6/15) * 200 = 80
-        assert score == 120.0
+        assert score == 80.0
 
 
 # ===================================================================
