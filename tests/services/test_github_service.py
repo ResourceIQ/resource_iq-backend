@@ -16,7 +16,6 @@ from app.api.integrations.GitHub.github_schema import (
 )
 from app.api.integrations.GitHub.github_service import GithubIntegrationService
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

@@ -4,8 +4,8 @@ from typing import Any, cast
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlmodel import Session
 
-from app.api.knowledge_graph.kg_extractor import LLMEntityExtractor
 from app.api.knowledge_graph.kg_build_service import KGBuildService
+from app.api.knowledge_graph.kg_extractor import LLMEntityExtractor
 from app.api.knowledge_graph.kg_schema import (
     KGLearningIntentEntities,
     KGLearningIntentRequest,
