@@ -28,3 +28,16 @@ def get_best_fits(
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/best-fits/role")
+def get_best_fits_for_role(
+     db: SessionDep,
+) -> list[ScoreProfile]:
+
+    try:
+        score_service = ScoreService(db)
+        results = score_service.get_job_positions()
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

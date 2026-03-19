@@ -307,3 +307,19 @@ class ScoreService:
         # Sort by score descending and return top N
         scores.sort(key=lambda x: x.total_score, reverse=True)
         return scores[:top_n]
+
+
+    def get_job_positions(self):
+        # 1. Create the search command
+        query = select(ResourceProfile.position)
+
+        # 2. Make sure results are unique and not empty
+        query = query.distinct().where(ResourceProfile.position != None)
+
+        # 3. Ask the database to run the search
+        raw_results = self.db.execute(query)
+
+        # 4. Convert the database rows into a simple list
+        clean_list = raw_results.scalars().all()
+
+        return clean_list
