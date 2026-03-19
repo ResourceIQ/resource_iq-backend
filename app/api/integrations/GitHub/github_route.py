@@ -360,9 +360,32 @@ async def sync_github(
 async def get_developers(session: SessionDep) -> list[GitHubUser]:
     try:
         github_manager = GithubIntegrationService(session)
-        return github_manager.get_all_org_members()
+        developers = github_manager.get_all_org_members()
+        if not developers:
+            logger.warning(
+                "No developers found for organization. "
+                "Check if GitHub App has 'members' permission or if org has public members."
+            )
+        return developers
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error("Error fetching developers: %s", str(e))
+        # Check for common error cases
+        if "credentials not found" in str(e).lower():
+            raise HTTPException(
+                status_code=400,
+                detail="GitHub integration not connected. "
+                "Please connect your GitHub App first.",
+            ) from e
+        if "bad credentials" in str(e).lower():
+            raise HTTPException(
+                status_code=401,
+                detail="GitHub authentication failed. "
+                "Please reconnect your GitHub App.",
+            ) from e
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch developers: {str(e)}",
+        ) from e
 
 
 @router.post(

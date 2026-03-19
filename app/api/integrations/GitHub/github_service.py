@@ -49,7 +49,8 @@ class GithubIntegrationService:
     def get_github_client(self) -> Github:
         """Authenticates as the GitHub App installation and returns a PyGithub client."""
         if not self.credentials:
-            raise Exception("GitHub integration credentials not found in database")
+            raise Exception(
+                "GitHub integration credentials not found in database")
 
         if not settings.GITHUB_APP_ID or not settings.GITHUB_PRIVATE_KEY:
             raise Exception(
@@ -68,13 +69,15 @@ class GithubIntegrationService:
     @property
     def organization_name(self) -> str:
         if not self.credentials:
-            raise Exception("GitHub integration credentials not found in database")
+            raise Exception(
+                "GitHub integration credentials not found in database")
         return self.credentials.org_name
 
     @property
     def installation_id(self) -> str:
         if not self.credentials:
-            raise Exception("GitHub integration credentials not found in database")
+            raise Exception(
+                "GitHub integration credentials not found in database")
         return self.credentials.github_install_id
 
     @staticmethod
@@ -158,7 +161,8 @@ class GithubIntegrationService:
             try:
                 real_issue_count = max(0, r.open_issues_count - open_pr_count)
             except Exception as e:
-                logger.warning(f"Failed to calculate real issues for {r.name}: {e}")
+                logger.warning(
+                    f"Failed to calculate real issues for {r.name}: {e}")
                 real_issue_count = r.open_issues_count
 
             # Get top contributors (limit to 10 for performance)
@@ -173,14 +177,16 @@ class GithubIntegrationService:
                         GitHubContributor(
                             login=c.login,
                             id=c.id,
-                            avatar_url=HttpUrl(c.avatar_url) if c.avatar_url else None,
+                            avatar_url=HttpUrl(
+                                c.avatar_url) if c.avatar_url else None,
                             contributions=c.contributions,
                         )
                     )
             except GithubException as e:
                 # 404/409 means no contributors/empty repo, not a real error
                 if e.status not in [404, 409]:
-                    logger.warning(f"Failed to get contributors for {r.name}: {e}")
+                    logger.warning(
+                        f"Failed to get contributors for {r.name}: {e}")
             except Exception as e:
                 logger.warning(f"Failed to get contributors for {r.name}: {e}")
 
@@ -196,9 +202,11 @@ class GithubIntegrationService:
             except GithubException as e:
                 # 403 means Actions not accessible, 404/409 means none/empty
                 if e.status not in [403, 404, 409]:
-                    logger.warning(f"Failed to get workflow status for {r.name}: {e}")
+                    logger.warning(
+                        f"Failed to get workflow status for {r.name}: {e}")
             except Exception as e:
-                logger.warning(f"Failed to get workflow status for {r.name}: {e}")
+                logger.warning(
+                    f"Failed to get workflow status for {r.name}: {e}")
 
             # Get languages
             languages = {}
@@ -216,7 +224,8 @@ class GithubIntegrationService:
             except GithubException as e:
                 # 409 means empty repository, 404 not found
                 if e.status not in [404, 409]:
-                    logger.warning(f"Failed to get last commit for {r.name}: {e}")
+                    logger.warning(
+                        f"Failed to get last commit for {r.name}: {e}")
             except Exception as e:
                 logger.warning(f"Failed to get last commit for {r.name}: {e}")
 
@@ -398,24 +407,58 @@ class GithubIntegrationService:
     # ── PR Context / Members ─────────────────────────────────────
 
     def get_all_org_members(self) -> list[GitHubUser]:
-        """Retrieves all members of the organization."""
+        """Retrieves all members of the organization.
+
+        First tries to get all members (public + private) using filter_="all".
+        Falls back to public members only if that fails.
+        """
         gh = self.get_github_client()
         org = gh.get_organization(self.organization_name)
         members_list = []
 
-        for member in org.get_members():
-            members_list.append(
-                GitHubUser(
-                    login=member.login,
-                    id=member.id,
-                    email=member.email,
-                    name=member.name,
-                    avatar_url=HttpUrl(member.avatar_url)
-                    if member.avatar_url
-                    else None,
-                    html_url=HttpUrl(member.html_url) if member.html_url else None,
-                )
+        try:
+            # Try to get all members (public + private) - requires member/admin permissions
+            members_iter = org.get_members(filter_="all")
+            logger.info(
+                "Attempting to fetch all members (public + private) for org: %s",
+                self.organization_name,
             )
+        except Exception as e:
+            # Fall back to public members if all members fetch fails
+            logger.warning(
+                "Could not fetch all members for org %s (may lack permissions), "
+                "falling back to public members: %s",
+                self.organization_name,
+                str(e),
+            )
+            members_iter = org.get_members()
+
+        try:
+            for member in members_iter:
+                members_list.append(
+                    GitHubUser(
+                        login=member.login,
+                        id=member.id,
+                        email=member.email,
+                        name=member.name,
+                        avatar_url=HttpUrl(member.avatar_url)
+                        if member.avatar_url
+                        else None,
+                        html_url=HttpUrl(
+                            member.html_url) if member.html_url else None,
+                    )
+                )
+            logger.info(
+                "Successfully fetched %d members for org: %s",
+                len(members_list),
+                self.organization_name,
+            )
+        except Exception as e:
+            logger.error(
+                "Error fetching members for org %s: %s", self.organization_name, str(
+                    e)
+            )
+            raise
 
         return members_list
 
@@ -525,7 +568,8 @@ class GithubIntegrationService:
                         author_login = pr.user.login
                         if author_login not in authors_prs:
                             authors_prs[author_login] = []
-                        authors_prs[author_login].append(self.generate_pr_context(pr))
+                        authors_prs[author_login].append(
+                            self.generate_pr_context(pr))
             except Exception as e:
                 logger.warning("Skipping repo %s: %s", repo.name, str(e))
                 continue
@@ -539,7 +583,8 @@ class GithubIntegrationService:
         self, author: GitHubUser, max_prs: int = 100
     ) -> dict[str, int | str]:
         """Fetch PRs for an author and store their vectors."""
-        pr_contents = self.get_org_closed_prs_context_by_author(author, max_prs)
+        pr_contents = self.get_org_closed_prs_context_by_author(
+            author, max_prs)
         self.vector_service.store_pr_contexts(author, pr_contents)
         return {
             "author_login": author.login,
@@ -588,7 +633,8 @@ class GithubIntegrationService:
                     if author_id not in current_repo_prs:
                         current_repo_prs[author_id] = []
 
-                    current_repo_prs[author_id].append(self.generate_pr_context(pr))
+                    current_repo_prs[author_id].append(
+                        self.generate_pr_context(pr))
 
                     # Update global count immediately
                     author_pr_counts[author_id] = current_count + 1
