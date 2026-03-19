@@ -45,9 +45,7 @@ async def connect_jira(session: SessionDep) -> JiraAuthConnectResponse:
         raise HTTPException(status_code=500, detail=f"Failed to start OAuth: {str(e)}")
 
 
-@router.get(
-    "/auth/callback", dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))]
-)
+@router.get("/auth/callback")
 async def jira_oauth_callback(
     session: SessionDep,
     code: str = Query(..., description="Authorization code from Atlassian"),
