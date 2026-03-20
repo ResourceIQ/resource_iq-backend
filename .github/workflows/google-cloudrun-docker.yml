@@ -16,23 +16,24 @@ env:
   WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WIF_PROVIDER }}
 
 jobs:
-  # build-test:
-    # name: 'Build and Verify'
-    # runs-on: 'ubuntu-latest'
-    # steps:
-    #   - uses: 'actions/checkout@v6'
+  build-test:
+    name: 'Build and Verify'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'actions/checkout@v6'
 
-    #   - name: 'Test Docker Build'
-    #     run: docker build . -t test-build
+      - name: 'Test Docker Build'
+        run: docker build . -t test-build
 
-    #   - name: 'Check for Migration Branches'
-    #     run: |
-    #       docker run --entrypoint /bin/bash test-build -c "alembic heads | wc -l | grep -q '^1$'" || \
-    #       (echo "ERROR: Multiple Alembic heads detected! You must merge your migration branches." && \
-    #        docker run --entrypoint /bin/bash test-build -c "alembic heads" && exit 1)
+      - name: 'Check for Migration Branches'
+        run: |
+          docker run --entrypoint /bin/bash test-build -c "alembic heads | wc -l | grep -q '^1$'" || \
+          (echo "ERROR: Multiple Alembic heads detected! You must merge your migration branches." && \
+           docker run --entrypoint /bin/bash test-build -c "alembic heads" && exit 1)
 
   deploy:
-    # needs: build-test
+    if: github.event_name != 'pull_request'
+    needs: build-test
     runs-on: 'ubuntu-latest'
     permissions:
       contents: 'read'
