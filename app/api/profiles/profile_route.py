@@ -125,17 +125,13 @@ async def create_profile(
 )
 async def list_profiles(
     session: SessionDep,
-    current_user: CurrentUser,
     has_jira: bool | None = Query(default=None, description="Filter by Jira connected"),
     has_github: bool | None = Query(
         default=None, description="Filter by GitHub connected"
-        
     ),
     limit: int = Query(default=50, ge=1, le=500),
 ) -> list[ResourceProfileResponse]:
     """List all resource profiles with optional filters."""
-    print(f"DEBUG: Request from User ID: {current_user.id}")
-    print(f"DEBUG: Current User Role in Token: {current_user.role}")
     query = session.query(ResourceProfile)
 
     if has_jira is True:

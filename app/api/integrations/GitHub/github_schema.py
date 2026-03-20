@@ -13,7 +13,6 @@ class GitHubUser(BaseModel):
 
 
 class GitHubDeveloperStats(GitHubUser):
-
     merged_prs: int = 0
     reviewed_prs: int = 0
     assigned_prs: int = 0

@@ -13,12 +13,12 @@ from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
 from app.api.integrations.GitHub.github_schema import (
     GitHubAppConnectionStatus,
     GitHubAppConnectResponse,
+    GitHubDeveloperStats,
     GitHubRepository,
     GitHubSyncRequest,
     GitHubSyncResponse,
     GitHubUser,
     PullRequestContent,
-    GitHubDeveloperStats,
 )
 from app.api.integrations.GitHub.github_service import GithubIntegrationService
 from app.api.user.user_model import Role

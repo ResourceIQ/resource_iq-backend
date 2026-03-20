@@ -50,8 +50,7 @@ class GithubIntegrationService:
     def get_github_client(self) -> Github:
         """Authenticates as the GitHub App installation and returns a PyGithub client."""
         if not self.credentials:
-            raise Exception(
-                "GitHub integration credentials not found in database")
+            raise Exception("GitHub integration credentials not found in database")
 
         if not settings.GITHUB_APP_ID or not settings.GITHUB_PRIVATE_KEY:
             raise Exception(
@@ -70,15 +69,13 @@ class GithubIntegrationService:
     @property
     def organization_name(self) -> str:
         if not self.credentials:
-            raise Exception(
-                "GitHub integration credentials not found in database")
+            raise Exception("GitHub integration credentials not found in database")
         return self.credentials.org_name
 
     @property
     def installation_id(self) -> str:
         if not self.credentials:
-            raise Exception(
-                "GitHub integration credentials not found in database")
+            raise Exception("GitHub integration credentials not found in database")
         return self.credentials.github_install_id
 
     @staticmethod
@@ -162,8 +159,7 @@ class GithubIntegrationService:
             try:
                 real_issue_count = max(0, r.open_issues_count - open_pr_count)
             except Exception as e:
-                logger.warning(
-                    f"Failed to calculate real issues for {r.name}: {e}")
+                logger.warning(f"Failed to calculate real issues for {r.name}: {e}")
                 real_issue_count = r.open_issues_count
 
             # Get top contributors (limit to 10 for performance)
@@ -178,16 +174,14 @@ class GithubIntegrationService:
                         GitHubContributor(
                             login=c.login,
                             id=c.id,
-                            avatar_url=HttpUrl(
-                                c.avatar_url) if c.avatar_url else None,
+                            avatar_url=HttpUrl(c.avatar_url) if c.avatar_url else None,
                             contributions=c.contributions,
                         )
                     )
             except GithubException as e:
                 # 404/409 means no contributors/empty repo, not a real error
                 if e.status not in [404, 409]:
-                    logger.warning(
-                        f"Failed to get contributors for {r.name}: {e}")
+                    logger.warning(f"Failed to get contributors for {r.name}: {e}")
             except Exception as e:
                 logger.warning(f"Failed to get contributors for {r.name}: {e}")
 
@@ -203,11 +197,9 @@ class GithubIntegrationService:
             except GithubException as e:
                 # 403 means Actions not accessible, 404/409 means none/empty
                 if e.status not in [403, 404, 409]:
-                    logger.warning(
-                        f"Failed to get workflow status for {r.name}: {e}")
+                    logger.warning(f"Failed to get workflow status for {r.name}: {e}")
             except Exception as e:
-                logger.warning(
-                    f"Failed to get workflow status for {r.name}: {e}")
+                logger.warning(f"Failed to get workflow status for {r.name}: {e}")
 
             # Get languages
             languages = {}
@@ -225,8 +217,7 @@ class GithubIntegrationService:
             except GithubException as e:
                 # 409 means empty repository, 404 not found
                 if e.status not in [404, 409]:
-                    logger.warning(
-                        f"Failed to get last commit for {r.name}: {e}")
+                    logger.warning(f"Failed to get last commit for {r.name}: {e}")
             except Exception as e:
                 logger.warning(f"Failed to get last commit for {r.name}: {e}")
 
@@ -445,8 +436,7 @@ class GithubIntegrationService:
                         avatar_url=HttpUrl(member.avatar_url)
                         if member.avatar_url
                         else None,
-                        html_url=HttpUrl(
-                            member.html_url) if member.html_url else None,
+                        html_url=HttpUrl(member.html_url) if member.html_url else None,
                     )
                 )
             logger.info(
@@ -456,8 +446,7 @@ class GithubIntegrationService:
             )
         except Exception as e:
             logger.error(
-                "Error fetching members for org %s: %s", self.organization_name, str(
-                    e)
+                "Error fetching members for org %s: %s", self.organization_name, str(e)
             )
             raise
 
@@ -479,7 +468,9 @@ class GithubIntegrationService:
                 reviewed_query = f"type:pr reviewed-by:{member.login} org:{org_name}"
                 reviewed_count = gh.search_issues(query=reviewed_query).totalCount
 
-                assigned_query = f"type:pr is:open assignee:{member.login} org:{org_name}"
+                assigned_query = (
+                    f"type:pr is:open assignee:{member.login} org:{org_name}"
+                )
                 assigned_count = gh.search_issues(query=assigned_query).totalCount
 
                 comments_query = f"type:pr commenter:{member.login} org:{org_name}"
@@ -501,7 +492,8 @@ class GithubIntegrationService:
                 )
             except Exception as e:
                 logger.warning(
-                    f"Failed to fetch detailed stats for {member.login}: {e}")
+                    f"Failed to fetch detailed stats for {member.login}: {e}"
+                )
                 # Fallback to member details with 0 stats
                 stats_list.append(
                     GitHubDeveloperStats(
@@ -526,7 +518,7 @@ class GithubIntegrationService:
 
         try:
             user = gh.get_user(login)
-            
+
             # Count merged PRs authored by this user
             merged_query = f"type:pr is:merged author:{login} org:{org_name}"
             merged_count = gh.search_issues(query=merged_query).totalCount
@@ -663,8 +655,7 @@ class GithubIntegrationService:
                         author_login = pr.user.login
                         if author_login not in authors_prs:
                             authors_prs[author_login] = []
-                        authors_prs[author_login].append(
-                            self.generate_pr_context(pr))
+                        authors_prs[author_login].append(self.generate_pr_context(pr))
             except Exception as e:
                 logger.warning("Skipping repo %s: %s", repo.name, str(e))
                 continue
@@ -678,8 +669,7 @@ class GithubIntegrationService:
         self, author: GitHubUser, max_prs: int = 100
     ) -> dict[str, int | str]:
         """Fetch PRs for an author and store their vectors."""
-        pr_contents = self.get_org_closed_prs_context_by_author(
-            author, max_prs)
+        pr_contents = self.get_org_closed_prs_context_by_author(author, max_prs)
         self.vector_service.store_pr_contexts(author, pr_contents)
         return {
             "author_login": author.login,
@@ -728,8 +718,7 @@ class GithubIntegrationService:
                     if author_id not in current_repo_prs:
                         current_repo_prs[author_id] = []
 
-                    current_repo_prs[author_id].append(
-                        self.generate_pr_context(pr))
+                    current_repo_prs[author_id].append(self.generate_pr_context(pr))
 
                     # Update global count immediately
                     author_pr_counts[author_id] = current_count + 1
