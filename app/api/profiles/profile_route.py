@@ -30,7 +30,7 @@ def _to_response(profile: ResourceProfile) -> ResourceProfileResponse:
         user_id=profile.user_id,
         phone_number=profile.phone_number,
         address=profile.address,
-        position=profile.position,
+        position_id=profile.position_id,
         jira_account_id=profile.jira_account_id,
         jira_display_name=profile.jira_display_name,
         jira_email=profile.jira_email,
@@ -96,8 +96,18 @@ async def create_profile(
             status_code=400, detail="Profile already exists for this user"
         )
 
+    if request.position_id is not None:
+        from app.api.profiles.position_model import JobPosition
+
+        position = session.get(JobPosition, request.position_id)
+        if not position:
+            raise HTTPException(
+                status_code=400, detail="Invalid position_id: Job position not found"
+            )
+
     profile = ResourceProfile(
         user_id=request.user_id,
+        position_id=request.position_id,
         skills=request.skills,
         domains=request.domains,
     )
@@ -364,6 +374,16 @@ async def update_skills(
 
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
+
+    if request.position_id is not None:
+        from app.api.profiles.position_model import JobPosition
+
+        position = session.get(JobPosition, request.position_id)
+        if not position:
+            raise HTTPException(
+                status_code=400, detail="Invalid position_id: Job position not found"
+            )
+        profile.position_id = request.position_id
 
     if request.skills is not None:
         profile.skills = ",".join(request.skills)

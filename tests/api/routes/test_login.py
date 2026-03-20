@@ -2,11 +2,11 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session
-from user_service import create_user
 
+from app.api.user.user_schema import UserCreate
+from app.api.user.user_service import create_user
 from app.core.config import settings
 from app.core.security import verify_password
-from app.schemas import UserCreate
 from app.utils import generate_password_reset_token
 from tests.utils.user import user_authentication_headers
 from tests.utils.utils import random_email, random_lower_string
@@ -49,6 +49,8 @@ def test_recovery_password(
     client: TestClient, normal_user_token_headers: dict[str, str]
 ) -> None:
     with (
+        patch("app.api.auth.auth_route.send_email", return_value=None),
+        patch("app.api.auth.auth_route.generate_reset_password_email"),
         patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
         patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
     ):

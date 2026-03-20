@@ -33,7 +33,12 @@ def _make_profile(
     p.total_workload = total_workload
     p.jira_workload = jira_workload
     p.github_workload = github_workload
-    p.position = position
+    if position:
+        p.position = MagicMock()
+        p.position.name = position
+    else:
+        p.position = None
+
     p.skills = skills
     p.domains = domains
     p.jira_account_id = jira_account_id
