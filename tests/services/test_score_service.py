@@ -35,14 +35,18 @@ def service(mock_db: MagicMock) -> ScoreService:
 def _make_profile(
     github_id: int | None = 42,
     user_id: str | None = None,
-    position: str = "Developer",
+    position: str | None = "Developer",
     total_workload: int = 0,
     jira_account_id: str | None = None,
 ) -> MagicMock:
     p = MagicMock()
     p.user_id = user_id or str(uuid4())
     p.github_id = github_id
-    p.position = position
+    if position:
+        p.position = MagicMock()
+        p.position.name = position
+    else:
+        p.position = None
     p.total_workload = total_workload
     p.jira_account_id = jira_account_id
     return p

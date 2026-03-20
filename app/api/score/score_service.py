@@ -309,7 +309,9 @@ class ScoreService:
             stmt = select(User.full_name).where(User.id == profile.user_id)
             user_name = self.db.execute(stmt).scalar() or "Unknown"
             score_profile = ScoreProfile(
-                user_id=profile.user_id, user_name=user_name, position=profile.position
+                user_id=profile.user_id,
+                user_name=user_name,
+                position=profile.position.name if profile.position else None,
             )
             live_jira_workload = 0
             if profile.jira_account_id:
@@ -370,3 +372,12 @@ class ScoreService:
         # Sort by score descending and return top N
         scores.sort(key=lambda x: x.total_score, reverse=True)
         return scores[:top_n]
+
+    def get_job_positions(self) -> list[str]:
+        """Fetch all unique job position names."""
+        from app.api.profiles.position_model import JobPosition
+
+        query = select(JobPosition.name)
+        raw_results = self.db.execute(query)
+        clean_list = raw_results.scalars().all()
+        return list(clean_list)
