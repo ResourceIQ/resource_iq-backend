@@ -1,7 +1,6 @@
 """User schemas for data validation."""
 
 import uuid
-from datetime import datetime
 
 from pydantic import EmailStr
 from sqlmodel import Field, SQLModel
