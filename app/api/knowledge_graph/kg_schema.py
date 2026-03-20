@@ -13,7 +13,12 @@ class KGBuildResult(TypedDict):
 
 @dataclass(frozen=True)
 class KGResourceSnapshot:
+    user_id: str
     id: int | None
+    profile_id: int | None
+    full_name: str | None
+    email: str | None
+    position_name: str | None
     github_id: int | None
     github_login: str | None
 
@@ -67,7 +72,9 @@ class KGLearningIntentEntities(SQLModel):
 
 
 class KGLearningIntentResponse(SQLModel):
-    github_id: int
+    user_id: str
+    profile_id: int | None = None
+    github_id: int | None
     github_login: str | None = None
     entities: KGLearningIntentEntities
     wants_to_work_in_domains: int = 0
@@ -99,7 +106,9 @@ class KGExperienceUpdateRequest(BaseModel):
 
 
 class KGExperienceProfileResponse(BaseModel):
-    github_id: int
+    user_id: str | None = None
+    profile_id: int | None = None
+    github_id: int | None = None
     github_login: str | None = None
     domains: list[KGExperienceItem] = Field(default_factory=list)
     skills: list[KGExperienceItem] = Field(default_factory=list)

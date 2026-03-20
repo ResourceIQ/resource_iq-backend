@@ -75,7 +75,7 @@ def enqueue_embedding_task(
 
 def execute_kg_build_task(
     task_id: str,
-    author_login: str | None = None,
+    author_github_id: int | None = None,
     batch_size: int = 50,
 ) -> None:
     """Execute KG build workflow and persist status/log updates to Redis."""
@@ -88,7 +88,7 @@ def execute_kg_build_task(
             graph_service = KnowledgeGraphService()
             builder = KGBuildService(session, graph_service)
             result = builder.build_from_stored_vectors(
-                author_login=author_login,
+                author_github_id=author_github_id,
                 batch_size=batch_size,
             )
 
@@ -123,7 +123,7 @@ def execute_kg_build_task(
 
 def enqueue_kg_build_task(
     background_tasks: BackgroundTasks,
-    author_login: str | None = None,
+    author_github_id: int | None = None,
     batch_size: int = 50,
 ) -> str:
     """Create a task id, initialize status, and enqueue the KG build worker."""
@@ -134,7 +134,7 @@ def enqueue_kg_build_task(
     background_tasks.add_task(
         execute_kg_build_task,
         task_id,
-        author_login,
+        author_github_id,
         batch_size,
     )
     return task_id

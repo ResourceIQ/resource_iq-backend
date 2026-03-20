@@ -146,3 +146,12 @@ jobs:
           gcloud run jobs execute resource-iq-prestart \
             --region ${{ env.REGION }} \
             --wait
+
+      - name: 'Allow Public Access'
+        run: |-
+          gcloud run services add-iam-policy-binding "${{ env.SERVICE }}" \
+            --project "${{ env.PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --member="allUsers" \
+            --role="roles/run.invoker" \
+            --quiet

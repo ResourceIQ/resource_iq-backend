@@ -1,5 +1,5 @@
 import logging
-from typing import cast
+from typing import Any, cast
 
 from pydantic import HttpUrl
 from sqlmodel import Session, select
@@ -13,7 +13,9 @@ from app.api.knowledge_graph.kg_schema import (
     KGResourceSnapshot,
 )
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
+from app.api.profiles.position_model import JobPosition
 from app.api.profiles.profile_model import ResourceProfile
+from app.api.user.user_model import User
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +27,28 @@ class KGBuildService:
         self.extractor = LLMEntityExtractor()
 
     def _load_resource_snapshots(self) -> list[KGResourceSnapshot]:
-        statement = select(ResourceProfile)
+        statement = (
+            select(ResourceProfile, User, JobPosition)
+            .join(User, cast(Any, ResourceProfile.user_id == User.id))
+            .join(
+                JobPosition,
+                cast(Any, ResourceProfile.position_id == JobPosition.id),
+                isouter=True,
+            )
+        )
         resources = self.session.exec(statement).all()
         snapshots = [
             KGResourceSnapshot(
-                id=resource.id,
-                github_id=resource.github_id,
-                github_login=resource.github_login,
+                user_id=str(profile.user_id),
+                id=profile.id,
+                profile_id=profile.id,
+                full_name=user.full_name,
+                email=user.email,
+                position_name=position.name if position else None,
+                github_id=profile.github_id,
+                github_login=profile.github_login,
             )
-            for resource in resources
+            for profile, user, position in resources
         ]
         self.session.rollback()
         return snapshots
@@ -41,12 +56,9 @@ class KGBuildService:
     def _load_pr_snapshots(
         self,
         github_id: int,
-        author_login: str | None,
         batch_size: int,
     ) -> list[KGPRSnapshot]:
         statement = select(GitHubPRVector).where(GitHubPRVector.author_id == github_id)
-        if author_login is not None:
-            statement = statement.where(GitHubPRVector.author_login == author_login)
 
         prs = self.session.exec(statement).all()[:batch_size]
         snapshots = [
@@ -71,7 +83,7 @@ class KGBuildService:
 
     def build_from_stored_vectors(
         self,
-        author_login: str | None = None,  # None = all authors
+        author_github_id: int | None = None,  # None = all authors
         batch_size: int = 50,
     ) -> KGBuildResult:
         results: KGBuildResult = {
@@ -81,10 +93,11 @@ class KGBuildService:
         }
         skipped_prs = 0
         resource_snapshots = self._load_resource_snapshots()
+        matching_resources = 0
         logger.info(
-            "KG build started: resources=%d author_filter=%s batch_size=%d",
+            "KG build started: resources=%d author_github_id=%s batch_size=%d",
             len(resource_snapshots),
-            author_login,
+            author_github_id,
             batch_size,
         )
 
@@ -98,9 +111,13 @@ class KGBuildService:
                     )
                     continue
 
+                if author_github_id is not None:
+                    if resource.github_id != author_github_id:
+                        continue
+                    matching_resources += 1
+
                 pr_snapshots = self._load_pr_snapshots(
                     github_id=resource.github_id,
-                    author_login=author_login,
                     batch_size=batch_size,
                 )
                 logger.info(
@@ -154,6 +171,7 @@ class KGBuildService:
                             context=pr.context,
                         ),
                         repo_name=pr.repo_name,
+                        resource=resource,
                     )
 
                     if (
@@ -212,6 +230,12 @@ class KGBuildService:
                 error_msg = f"Error processing resource {resource_identifier}: {exc}"
                 logger.error(error_msg)
                 results["errors"].append(error_msg)
+
+        if author_github_id is not None and matching_resources == 0:
+            logger.warning(
+                "KG build author_github_id=%s did not match any resource github_id",
+                author_github_id,
+            )
 
         logger.info(
             "KG build finished: prs_processed=%d prs_skipped=%d profiles_updated=%d errors=%d",
