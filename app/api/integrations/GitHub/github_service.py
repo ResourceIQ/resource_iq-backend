@@ -479,6 +479,12 @@ class GithubIntegrationService:
                 reviewed_query = f"type:pr reviewed-by:{member.login} org:{org_name}"
                 reviewed_count = gh.search_issues(query=reviewed_query).totalCount
 
+                assigned_query = f"type:pr is:open assignee:{member.login} org:{org_name}"
+                assigned_count = gh.search_issues(query=assigned_query).totalCount
+
+                comments_query = f"type:pr commenter:{member.login} org:{org_name}"
+                comments_count = gh.search_issues(query=comments_query).totalCount
+
                 stats_list.append(
                     GitHubDeveloperStats(
                         login=member.login,
@@ -489,6 +495,8 @@ class GithubIntegrationService:
                         html_url=member.html_url,
                         merged_prs=merged_count,
                         reviewed_prs=reviewed_count,
+                        assigned_prs=assigned_count,
+                        comments_count=comments_count,
                     )
                 )
             except Exception as e:
@@ -505,6 +513,8 @@ class GithubIntegrationService:
                         html_url=member.html_url,
                         merged_prs=0,
                         reviewed_prs=0,
+                        assigned_prs=0,
+                        comments_count=0,
                     )
                 )
 
@@ -525,6 +535,12 @@ class GithubIntegrationService:
             reviewed_query = f"type:pr reviewed-by:{login} org:{org_name}"
             reviewed_count = gh.search_issues(query=reviewed_query).totalCount
 
+            assigned_query = f"type:pr is:open assignee:{login} org:{org_name}"
+            assigned_count = gh.search_issues(query=assigned_query).totalCount
+
+            comments_query = f"type:pr commenter:{login} org:{org_name}"
+            comments_count = gh.search_issues(query=comments_query).totalCount
+
             return GitHubDeveloperStats(
                 login=user.login,
                 id=user.id,
@@ -534,6 +550,8 @@ class GithubIntegrationService:
                 html_url=HttpUrl(user.html_url) if user.html_url else None,
                 merged_prs=merged_count,
                 reviewed_prs=reviewed_count,
+                assigned_prs=assigned_count,
+                comments_count=comments_count,
             )
         except Exception as e:
             logger.error(f"Failed to fetch stats for {login}: {e}")
