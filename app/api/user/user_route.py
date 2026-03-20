@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import func, select
 
+from app.api.profiles.profile_model import ResourceProfile
 from app.api.user import user_service
 from app.api.user.user_model import Role, User
 from app.api.user.user_schema import (
@@ -14,6 +15,8 @@ from app.api.user.user_schema import (
     UserCreate,
     UserPublic,
     UserRegister,
+    UserRegisterWithProfile,
+    UserRegistrationResponse,
     UsersPublic,
     UserUpdate,
     UserUpdateMe,
@@ -176,6 +179,67 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     return user
 
 
+@router.post(
+    "/register-with-profile",
+    response_model=UserRegistrationResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
+def register_user_with_profile(
+    session: SessionDep, user_in: UserRegisterWithProfile
+) -> Any:
+    """
+    Admin endpoint: create a user, auto-create a ResourceProfile,
+    and optionally map GitHub/Jira identities in one request.
+    """
+    existing = user_service.get_user_by_email(session=session, email=user_in.email)
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="The user with this email already exists in the system",
+        )
+
+    user_create = UserCreate(
+        email=user_in.email,
+        password=user_in.password,
+        full_name=user_in.full_name,
+        role=user_in.role,
+        is_active=user_in.is_active,
+    )
+    user = user_service.create_user(session=session, user_create=user_create)
+
+    from datetime import datetime
+
+    profile = ResourceProfile(
+        user_id=user.id,
+        github_id=user_in.github_id,
+        github_login=user_in.github_login,
+        github_display_name=user_in.github_display_name,
+        github_email=user_in.github_email,
+        github_avatar_url=user_in.github_avatar_url,
+        github_connected_at=datetime.utcnow() if user_in.github_login else None,
+        jira_account_id=user_in.jira_account_id,
+        jira_display_name=user_in.jira_display_name,
+        jira_email=user_in.jira_email,
+        jira_avatar_url=user_in.jira_avatar_url,
+        jira_connected_at=datetime.utcnow() if user_in.jira_account_id else None,
+    )
+    session.add(profile)
+    session.commit()
+    session.refresh(profile)
+
+    return UserRegistrationResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role,
+        is_active=user.is_active,
+        has_github=profile.has_github,
+        github_login=profile.github_login,
+        has_jira=profile.has_jira,
+        jira_display_name=profile.jira_display_name,
+    )
+
+
 @router.get(
     "/{user_id}",
     response_model=UserPublic,
@@ -241,7 +305,7 @@ def delete_user(
     session: SessionDep, current_user: CurrentUser, user_id: uuid.UUID
 ) -> Message:
     """
-    Delete a user. (Admin only)
+    Delete a user and their associated resource profile. (Admin only)
     """
     user = session.get(User, user_id)
     if not user:
@@ -250,6 +314,18 @@ def delete_user(
         raise HTTPException(
             status_code=403, detail="Admins are not allowed to delete themselves"
         )
+
+    from typing import Any, cast
+
+    profile = (
+        session.query(ResourceProfile)
+        .filter(cast(Any, ResourceProfile.user_id == user_id))
+        .first()
+    )
+    if profile:
+        session.delete(profile)
+        session.flush()
+
     session.delete(user)
     session.commit()
     return Message(message="User deleted successfully")
