@@ -305,7 +305,7 @@ def delete_user(
     session: SessionDep, current_user: CurrentUser, user_id: uuid.UUID
 ) -> Message:
     """
-    Delete a user. (Admin only)
+    Delete a user and their associated resource profile. (Admin only)
     """
     user = session.get(User, user_id)
     if not user:
@@ -314,6 +314,18 @@ def delete_user(
         raise HTTPException(
             status_code=403, detail="Admins are not allowed to delete themselves"
         )
+
+    from typing import Any, cast
+
+    profile = (
+        session.query(ResourceProfile)
+        .filter(cast(Any, ResourceProfile.user_id == user_id))
+        .first()
+    )
+    if profile:
+        session.delete(profile)
+        session.flush()
+
     session.delete(user)
     session.commit()
     return Message(message="User deleted successfully")
