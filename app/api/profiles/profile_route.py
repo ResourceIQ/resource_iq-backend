@@ -121,7 +121,7 @@ async def create_profile(
 @router.get(
     "/",
     response_model=list[ResourceProfileResponse],
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
 )
 async def list_profiles(
     session: SessionDep,
