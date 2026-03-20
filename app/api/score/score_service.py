@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import Any, cast
 
 import torch
@@ -311,12 +312,18 @@ class ScoreService:
         return final_score, issue_matches[:3]
 
     def _calculate_developer_knowledge_graph_score(
-        self, github_id: int, task_entities: ExtractedEntities
+        self,
+        user_id: uuid.UUID,
+        github_id: int | None,
+        task_entities: ExtractedEntities,
     ) -> tuple[float, list[KGMatchInfo]]:
         if self.kg_service is None or self._disable_kg_scoring:
             return 0.0, []
 
-        expertise_summary = self.kg_service.get_resource_expertise_summary(github_id)
+        expertise_summary = self.kg_service.get_resource_expertise_summary(
+            user_id=str(user_id),
+            github_id=github_id,
+        )
         return self._score_knowledge_graph_alignment(task_entities, expertise_summary)
 
     @classmethod
@@ -426,6 +433,7 @@ class ScoreService:
                         try:
                             kg_score, kg_matches = (
                                 self._calculate_developer_knowledge_graph_score(
+                                    user_id=profile.user_id,
                                     github_id=profile.github_id,
                                     task_entities=task_entities,
                                 )

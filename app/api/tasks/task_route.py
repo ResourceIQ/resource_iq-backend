@@ -30,7 +30,7 @@ class EmbeddingTaskResponse(BaseModel):
 
 
 class KGTaskRequest(BaseModel):
-    author_login: str | None = None
+    author_github_id: int | None = None
     batch_size: int = Field(
         default=50,
         ge=1,
@@ -87,7 +87,7 @@ async def trigger_kg_build_task(
     req = request or KGTaskRequest()
     task_id = enqueue_kg_build_task(
         background_tasks=background_tasks,
-        author_login=req.author_login,
+        author_github_id=req.author_github_id,
         batch_size=req.batch_size,
     )
     return KGTaskResponse(task_id=task_id, status="queued")

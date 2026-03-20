@@ -25,6 +25,7 @@ from app.api.knowledge_graph.kg_schema import (
     KGExperienceItem,
     KGExperienceProfileResponse,
     KGExpertiseSummary,
+    KGResourceSnapshot,
 )
 from app.api.knowledge_graph.kg_taxonomy import (
     DOMAIN_SLUGS,
@@ -105,6 +106,48 @@ class KnowledgeGraphService:
             return
         relationship_manager.connect(target_node)
 
+    @staticmethod
+    def _build_resource_properties(
+        *,
+        user_id: str | None,
+        profile_id: int | None = None,
+        github_id: int | None = None,
+        github_login: str | None = None,
+        full_name: str | None = None,
+        email: str | None = None,
+        position_name: str | None = None,
+    ) -> dict[str, Any]:
+        if not user_id and github_id is None:
+            raise ValueError("Either user_id or github_id is required")
+
+        props: dict[str, Any] = {}
+        if user_id:
+            props["user_id"] = user_id
+        if profile_id is not None:
+            props["profile_id"] = profile_id
+        if github_id is not None:
+            props["github_id"] = github_id
+        if github_login:
+            props["login"] = github_login
+        if full_name:
+            props["full_name"] = full_name
+        if email:
+            props["email"] = email
+        if position_name:
+            props["position_name"] = position_name
+        return props
+
+    @staticmethod
+    def _resource_match_prefix() -> str:
+        return """
+            MATCH (r:Resource)
+            WHERE ($user_id IS NOT NULL AND r.user_id = $user_id)
+               OR ($github_id IS NOT NULL AND r.github_id = $github_id)
+            WITH r
+            ORDER BY CASE WHEN $user_id IS NOT NULL AND r.user_id = $user_id THEN 0 ELSE 1 END
+            LIMIT 1
+        """
+
     def pr_exists(self, pr_id: int) -> bool:
         try:
             PR.nodes.get(identifier=pr_id)
@@ -129,10 +172,17 @@ class KnowledgeGraphService:
         pr_node = PR.nodes.get(identifier=pr_id)
         return bool((pr_node.context or "").strip())
 
-    def get_resource_expertise_summary(self, github_id: int) -> KGExpertiseSummary:
-        rows, _ = db.cypher_query(
-            """
-            MATCH (r:Resource {github_id: $github_id})
+    def get_resource_expertise_summary(
+        self,
+        github_id: int | None = None,
+        user_id: str | None = None,
+    ) -> KGExpertiseSummary:
+        if user_id is None and github_id is None:
+            return KGExpertiseSummary()
+
+        query = (
+            self._resource_match_prefix()
+            + """
             CALL {
                 WITH r
                 OPTIONAL MATCH (r)<-[:AUTHORED_BY]-(pr:PR)
@@ -169,8 +219,12 @@ class KnowledgeGraphService:
                 RETURN values AS tools
             }
             RETURN pr_count, languages, frameworks, domains, skills, tools
-            """,
-            {"github_id": github_id},
+            """
+        )
+
+        rows, _ = db.cypher_query(
+            query,
+            {"user_id": user_id, "github_id": github_id},
         )
 
         if not rows:
@@ -188,11 +242,15 @@ class KnowledgeGraphService:
 
     def get_resource_experience(
         self,
-        github_id: int,
+        github_id: int | None = None,
+        user_id: str | None = None,
     ) -> KGExperienceProfileResponse:
-        rows, _ = db.cypher_query(
-            """
-            MATCH (r:Resource {github_id: $github_id})
+        if user_id is None and github_id is None:
+            return KGExperienceProfileResponse()
+
+        query = (
+            self._resource_match_prefix()
+            + """
             CALL {
                 WITH r
                 OPTIONAL MATCH (r)-[rel:HAS_EXPERIENCE_WITH]->(node:Domain)
@@ -243,51 +301,65 @@ class KnowledgeGraphService:
                     END
                 ) WHERE item IS NOT NULL] AS tools
             }
-            RETURN r.login, domains, skills, languages, frameworks, tools
-            """,
-            {"github_id": github_id},
+            RETURN r.user_id, r.profile_id, r.github_id, r.login, domains, skills, languages, frameworks, tools
+            """
+        )
+
+        rows, _ = db.cypher_query(
+            query,
+            {"user_id": user_id, "github_id": github_id},
         )
 
         if not rows:
-            return KGExperienceProfileResponse(github_id=github_id)
+            return KGExperienceProfileResponse(
+                user_id=user_id,
+                github_id=github_id,
+            )
 
         row = cast(list[Any], rows[0])
         return KGExperienceProfileResponse(
-            github_id=github_id,
-            github_login=cast(str | None, row[0]),
+            user_id=cast(str | None, row[0]),
+            profile_id=cast(int | None, row[1]),
+            github_id=cast(int | None, row[2]) or github_id,
+            github_login=cast(str | None, row[3]),
             domains=self._sort_experience_items(
-                [
-                    KGExperienceItem.model_validate(item)
-                    for item in cast(list[Any], row[1] or [])
-                ]
-            ),
-            skills=self._sort_experience_items(
-                [
-                    KGExperienceItem.model_validate(item)
-                    for item in cast(list[Any], row[2] or [])
-                ]
-            ),
-            languages=self._sort_experience_items(
-                [
-                    KGExperienceItem.model_validate(item)
-                    for item in cast(list[Any], row[3] or [])
-                ]
-            ),
-            frameworks=self._sort_experience_items(
                 [
                     KGExperienceItem.model_validate(item)
                     for item in cast(list[Any], row[4] or [])
                 ]
             ),
-            tools=self._sort_experience_items(
+            skills=self._sort_experience_items(
                 [
                     KGExperienceItem.model_validate(item)
                     for item in cast(list[Any], row[5] or [])
                 ]
             ),
+            languages=self._sort_experience_items(
+                [
+                    KGExperienceItem.model_validate(item)
+                    for item in cast(list[Any], row[6] or [])
+                ]
+            ),
+            frameworks=self._sort_experience_items(
+                [
+                    KGExperienceItem.model_validate(item)
+                    for item in cast(list[Any], row[7] or [])
+                ]
+            ),
+            tools=self._sort_experience_items(
+                [
+                    KGExperienceItem.model_validate(item)
+                    for item in cast(list[Any], row[8] or [])
+                ]
+            ),
         )
 
-    def upsert_pr(self, pr: PullRequestContent, repo_name: str) -> None:
+    def upsert_pr(
+        self,
+        pr: PullRequestContent,
+        repo_name: str,
+        resource: KGResourceSnapshot | None = None,
+    ) -> None:
         # 1. Upsert PR node (create_or_update returns a list, so we grab the first element)
         pr_node = self._create_or_update_node(
             PR,
@@ -302,10 +374,26 @@ class KnowledgeGraphService:
             },
         )
 
-        # 2. Upsert Author & Connect (keyed on GitHub ID)
-        author_node = self._create_or_update_node(
-            Resource, {"github_id": pr.author.id, "login": pr.author.login}
-        )
+        # 2. Upsert Author & Connect (keyed primarily on user_id, then github_id)
+        if resource:
+            resource_props = self._build_resource_properties(
+                user_id=resource.user_id,
+                profile_id=resource.profile_id,
+                github_id=resource.github_id or pr.author.id,
+                github_login=resource.github_login or pr.author.login,
+                full_name=resource.full_name,
+                email=resource.email,
+                position_name=resource.position_name,
+            )
+        else:
+            fallback_user_id = f"github:{pr.author.id}"
+            resource_props = self._build_resource_properties(
+                user_id=fallback_user_id,
+                github_id=pr.author.id,
+                github_login=pr.author.login,
+            )
+
+        author_node = self._create_or_update_node(Resource, resource_props)
         self._connect_if_missing(pr_node.author, author_node)
 
         # 3. Upsert Component (repo) & Connect
@@ -406,8 +494,13 @@ class KnowledgeGraphService:
 
     def upsert_resource_learning_intent(
         self,
-        github_id: int,
+        user_id: str,
+        profile_id: int | None,
+        github_id: int | None,
         github_login: str | None,
+        full_name: str | None,
+        email: str | None,
+        position_name: str | None,
         entities: ExtractedEntities,
     ) -> dict[str, int]:
         """
@@ -416,9 +509,15 @@ class KnowledgeGraphService:
         We intentionally replace previous intent edges to keep the graph aligned
         with the user's most recent goals.
         """
-        resource_props: dict[str, Any] = {"github_id": github_id}
-        if github_login:
-            resource_props["login"] = github_login
+        resource_props = self._build_resource_properties(
+            user_id=user_id,
+            profile_id=profile_id,
+            github_id=github_id,
+            github_login=github_login,
+            full_name=full_name,
+            email=email,
+            position_name=position_name,
+        )
 
         resource_node = self._create_or_update_node(Resource, resource_props)
 
@@ -464,17 +563,28 @@ class KnowledgeGraphService:
 
     def upsert_resource_experience(
         self,
-        github_id: int,
+        user_id: str,
+        profile_id: int | None,
+        github_id: int | None,
         github_login: str | None,
+        full_name: str | None = None,
+        email: str | None = None,
+        position_name: str | None = None,
         domains: list[KGExperienceItem] | None = None,
         skills: list[KGExperienceItem] | None = None,
         languages: list[KGExperienceItem] | None = None,
         frameworks: list[KGExperienceItem] | None = None,
         tools: list[KGExperienceItem] | None = None,
     ) -> KGExperienceProfileResponse:
-        resource_props: dict[str, Any] = {"github_id": github_id}
-        if github_login:
-            resource_props["login"] = github_login
+        resource_props = self._build_resource_properties(
+            user_id=user_id,
+            profile_id=profile_id,
+            github_id=github_id,
+            github_login=github_login,
+            full_name=full_name,
+            email=email,
+            position_name=position_name,
+        )
 
         normalized_domains = (
             self._normalize_experience_items(domains, DOMAIN_VALUE_MAP)
@@ -554,4 +664,4 @@ class KnowledgeGraphService:
                     {"level": item.experience_level},
                 )
 
-        return self.get_resource_experience(github_id)
+        return self.get_resource_experience(github_id=github_id, user_id=user_id)

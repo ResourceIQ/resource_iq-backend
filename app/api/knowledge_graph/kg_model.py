@@ -22,8 +22,13 @@ class ExperienceRel(StructuredRel):
 
 # --- Node Models ---
 class Resource(StructuredNode):
-    github_id = IntegerProperty(unique_index=True, required=True)
+    user_id = StringProperty(unique_index=True, required=True)
+    profile_id = IntegerProperty(index=True)
+    github_id = IntegerProperty(unique_index=True)
     login = StringProperty(index=True)
+    full_name = StringProperty()
+    email = StringProperty(index=True)
+    position_name = StringProperty(index=True)
 
     # User-declared intent relationships.
     wants_to_work_in = RelationshipTo("Domain", "WANTS_TO_WORK_IN")
