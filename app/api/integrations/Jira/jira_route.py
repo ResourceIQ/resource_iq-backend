@@ -20,6 +20,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraLiveStatsResponse,
     JiraSyncRequest,
     JiraSyncResponse,
+    JiraUser,
 )
 from app.api.integrations.Jira.jira_service import JiraIntegrationService
 from app.api.user.user_model import Role
@@ -135,6 +136,27 @@ async def disconnect_jira_auth(session: SessionDep) -> dict[str, str]:
         session.delete(token)
     session.commit()
     return {"message": "Jira disconnected successfully"}
+
+
+@router.get(
+    "/users",
+    response_model=list[JiraUser],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
+async def get_jira_users(
+    session: SessionDep,
+    max_results: int = Query(default=100, ge=1, le=500),
+) -> list[JiraUser]:
+    """Get all Jira users from the connected Jira instance."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_all_jira_users(max_results=max_results)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch Jira users: {str(e)}"
+        )
 
 
 @router.post(
