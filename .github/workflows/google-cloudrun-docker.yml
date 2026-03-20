@@ -32,7 +32,6 @@ jobs:
     #        docker run --entrypoint /bin/bash test-build -c "alembic heads" && exit 1)
 
   deploy:
-
     # needs: build-test
     runs-on: 'ubuntu-latest'
     permissions:
@@ -76,6 +75,7 @@ jobs:
           ENVIRONMENT: "production"
           PROJECT_NAME: "ResourceIQ"
           CLOUD_SQL_CONNECTION_NAME: "${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq"
+          SERVICE_ACCOUNT_EMAIL: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           POSTGRES_PORT: "5432"
           POSTGRES_DB: "resource-iq"
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
@@ -120,20 +120,12 @@ jobs:
         run: |-
           set -euo pipefail
 
-          CLOUDSQL_INSTANCE="${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq"
-          touch .env
+          # Create a .env file so the compose up command reads all these variables automatically
+          env > .env
 
           gcloud beta run compose up cloudrun.compose.yaml \
             --project "${{ env.PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
-            --quiet
-
-          gcloud beta run services update "${{ env.SERVICE }}" \
-            --project "${{ env.PROJECT_ID }}" \
-            --region "${{ env.REGION }}" \
-            --service-account "${{ secrets.GCP_SERVICE_ACCOUNT }}" \
-            --add-cloudsql-instances "${CLOUDSQL_INSTANCE}" \
-            --update-env-vars "CLOUD_SQL_CONNECTION_NAME=${CLOUDSQL_INSTANCE}" \
             --quiet
 
       - name: 'Create or Update Migration Job'

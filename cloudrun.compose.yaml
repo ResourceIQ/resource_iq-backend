@@ -1,5 +1,10 @@
 name: resource-iq-be
 
+x-google-backend:
+  serviceAccount: ${SERVICE_ACCOUNT_EMAIL}
+  annotations:
+    run.googleapis.com/cloudsql-instances: ${CLOUD_SQL_CONNECTION_NAME}
+
 services:
   resource-iq:
     image: "${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}"
