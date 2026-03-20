@@ -35,8 +35,8 @@ def get_best_fits(
 
 @router.post("/best-fits/role")
 def get_best_fits_for_role(
-     db: SessionDep,
-) -> list[ScoreProfile]:
+    db: SessionDep,
+) -> list[str]:
 
     try:
         score_service = ScoreService(db)

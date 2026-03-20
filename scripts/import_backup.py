@@ -1,16 +1,17 @@
 import json
-import uuid
-import sys
 import os
+import sys
+import uuid
 from datetime import datetime
-from typing import Any
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from sqlmodel import Session, select, SQLModel, Field
+from sqlmodel import Field, Session, SQLModel, select
+
+from app.api.user.user_model import Role, User
 from app.db.session import engine
-from app.api.user.user_model import User, Role
+
 
 # Local ResourceProfile model that matches the ACTUAL database schema
 class LocalResourceProfile(SQLModel, table=True):
@@ -19,7 +20,7 @@ class LocalResourceProfile(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id", unique=True, index=True)
     phone_number: str | None = None
     address: str | None = None
-    position: str | None = None # Matches code model
+    position: str | None = None  # Matches code model
     jira_account_id: str | None = None
     jira_display_name: str | None = None
     jira_email: str | None = None
@@ -40,7 +41,9 @@ class LocalResourceProfile(SQLModel, table=True):
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
+
 BACKUP_FILE = "/Users/dilukalahiru/Downloads/resourceiq_backup_20260318_191457.json"
+
 
 def parse_datetime(dt_str: str | None) -> datetime | None:
     if not dt_str:
@@ -53,16 +56,17 @@ def parse_datetime(dt_str: str | None) -> datetime | None:
     except ValueError:
         return None
 
+
 def import_data():
     if not os.path.exists(BACKUP_FILE):
         print(f"Error: Backup file not found at {BACKUP_FILE}")
         return
 
     print(f"Reading backup from {BACKUP_FILE}...")
-    with open(BACKUP_FILE, "r") as f:
+    with open(BACKUP_FILE) as f:
         data = json.load(f)
 
-    # Note: Using create_all might not do anything if table exists, 
+    # Note: Using create_all might not do anything if table exists,
     # but it won't hurt. SQLModel knows about LocalResourceProfile now.
     print("Ensuring tables exist...")
     SQLModel.metadata.create_all(engine)
@@ -70,7 +74,7 @@ def import_data():
     with Session(engine) as session:
         # Import Users
         print("Importing users...")
-        users_map = {} # email -> User object
+        users_map = {}  # email -> User object
         for u_data in data.get("users", []):
             email = u_data["email"]
             db_user = session.exec(select(User).where(User.email == email)).first()
@@ -89,9 +93,9 @@ def import_data():
             else:
                 print(f"  User already exists: {email}")
             users_map[email] = db_user
-        
-        session.commit() # Commit users first to ensure FKs work
-        
+
+        session.commit()  # Commit users first to ensure FKs work
+
         # Import Resource Profiles
         print("Importing resource profiles...")
         for p_data in data.get("resource_profiles", []):
@@ -99,20 +103,26 @@ def import_data():
             user = users_map.get(email)
             if not user:
                 user = session.exec(select(User).where(User.email == email)).first()
-            
+
             if not user:
                 print(f"  Skipping profile for {email}: User not found in database")
                 continue
-            
+
             # Using LocalResourceProfile for the query as well
-            db_profile = session.exec(select(LocalResourceProfile).where(LocalResourceProfile.user_id == user.id)).first()
+            db_profile = session.exec(
+                select(LocalResourceProfile).where(
+                    LocalResourceProfile.user_id == user.id
+                )
+            ).first()
             if not db_profile:
                 print(f"  Adding profile for user: {email}")
                 db_profile = LocalResourceProfile(
                     user_id=user.id,
                     phone_number=p_data.get("phone_number"),
                     address=p_data.get("address"),
-                    position_id=p_data.get("position_id"), # Uses position_id as in DB and JSON
+                    position_id=p_data.get(
+                        "position_id"
+                    ),  # Uses position_id as in DB and JSON
                     jira_account_id=p_data.get("jira_account_id"),
                     jira_display_name=p_data.get("jira_display_name"),
                     jira_email=p_data.get("jira_email"),
@@ -123,20 +133,25 @@ def import_data():
                     github_display_name=p_data.get("github_display_name"),
                     github_email=p_data.get("github_email"),
                     github_avatar_url=p_data.get("github_avatar_url"),
-                    github_connected_at=parse_datetime(p_data.get("github_connected_at")),
+                    github_connected_at=parse_datetime(
+                        p_data.get("github_connected_at")
+                    ),
                     skills=p_data.get("skills"),
                     domains=p_data.get("domains"),
                     jira_workload=p_data.get("jira_workload", 0),
                     github_workload=p_data.get("github_workload", 0),
                     total_workload=p_data.get("total_workload", 0),
-                    workload_updated_at=parse_datetime(p_data.get("workload_updated_at")),
+                    workload_updated_at=parse_datetime(
+                        p_data.get("workload_updated_at")
+                    ),
                 )
                 session.add(db_profile)
             else:
                 print(f"  Profile already exists for user: {email}")
-        
+
         session.commit()
     print("Import completed successfully!")
+
 
 if __name__ == "__main__":
     import_data()

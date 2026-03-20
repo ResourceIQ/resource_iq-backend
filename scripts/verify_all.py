@@ -1,16 +1,18 @@
-import sys
 import os
+import sys
+
 from sqlmodel import Session, select
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.db.session import engine
-from app.api.user.user_model import User
-from app.api.user.user_service import get_user_by_email
 from app.api.dashboard.dashboard_service import get_dashboard_data
 from app.api.profiles.profile_model import ResourceProfile
 from app.api.score.score_service import ScoreService
+from app.api.user.user_model import User
+from app.api.user.user_service import get_user_by_email
+from app.db.session import engine
+
 
 def verify_all():
     print("--- Starting Backend Verification ---")
@@ -23,9 +25,13 @@ def verify_all():
                 test_email = users[0].email
                 user = get_user_by_email(session=session, email=test_email)
                 if user:
-                    print(f"[OK] UserService: Successfully fetched user by email: {test_email}")
+                    print(
+                        f"[OK] UserService: Successfully fetched user by email: {test_email}"
+                    )
                 else:
-                    print(f"[ERROR] UserService: Failed to fetch user by email: {test_email}")
+                    print(
+                        f"[ERROR] UserService: Failed to fetch user by email: {test_email}"
+                    )
         except Exception as e:
             print(f"[ERROR] Users: {e}")
 
@@ -36,7 +42,9 @@ def verify_all():
             if profiles:
                 # Check if 'position' field (resolved earlier) is working
                 pos = profiles[0].position
-                print(f"[OK] ResourceProfile: 'position' field accessible (value: {pos})")
+                print(
+                    f"[OK] ResourceProfile: 'position' field accessible (value: {pos})"
+                )
         except Exception as e:
             print(f"[ERROR] ResourceProfile: {e}")
 
@@ -51,11 +59,14 @@ def verify_all():
         try:
             score_service = ScoreService(session)
             positions = score_service.get_job_positions()
-            print(f"[OK] ScoreService: get_job_positions successful. Count: {len(positions)}")
+            print(
+                f"[OK] ScoreService: get_job_positions successful. Count: {len(positions)}"
+            )
         except Exception as e:
             print(f"[ERROR] ScoreService: {e}")
 
     print("--- Verification Finished ---")
+
 
 if __name__ == "__main__":
     verify_all()

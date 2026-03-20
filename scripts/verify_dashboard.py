@@ -1,12 +1,14 @@
-import sys
 import os
+import sys
+
 from sqlmodel import Session
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.db.session import engine
 from app.api.dashboard.dashboard_service import get_dashboard_data
+from app.db.session import engine
+
 
 def verify():
     with Session(engine) as session:
@@ -18,8 +20,10 @@ def verify():
         except Exception as e:
             print(f"Error retrieving dashboard data: {e}")
             import traceback
+
             traceback.print_exc()
             sys.exit(1)
+
 
 if __name__ == "__main__":
     verify()

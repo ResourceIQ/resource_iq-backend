@@ -373,12 +373,11 @@ class ScoreService:
         scores.sort(key=lambda x: x.total_score, reverse=True)
         return scores[:top_n]
 
-
-    def get_job_positions(self):
+    def get_job_positions(self) -> list[str]:
         """Fetch all unique job position names."""
         from app.api.profiles.position_model import JobPosition
 
         query = select(JobPosition.name)
         raw_results = self.db.execute(query)
         clean_list = raw_results.scalars().all()
-        return clean_list
+        return list(clean_list)
