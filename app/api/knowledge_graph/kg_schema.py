@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import TypedDict
 
-from pydantic import Field
+from pydantic import BaseModel, Field, field_validator
 from sqlmodel import SQLModel
 
 
@@ -75,3 +75,42 @@ class KGLearningIntentResponse(SQLModel):
     wants_to_learn_languages: int = 0
     wants_to_learn_frameworks: int = 0
     wants_to_learn_tools: int = 0
+
+
+class KGExperienceItem(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    experience_level: int = Field(ge=0, le=10)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Name must not be blank")
+        return normalized
+
+
+class KGExperienceUpdateRequest(BaseModel):
+    domains: list[KGExperienceItem] | None = None
+    skills: list[KGExperienceItem] | None = None
+    languages: list[KGExperienceItem] | None = None
+    frameworks: list[KGExperienceItem] | None = None
+    tools: list[KGExperienceItem] | None = None
+
+
+class KGExperienceProfileResponse(BaseModel):
+    github_id: int
+    github_login: str | None = None
+    domains: list[KGExperienceItem] = Field(default_factory=list)
+    skills: list[KGExperienceItem] = Field(default_factory=list)
+    languages: list[KGExperienceItem] = Field(default_factory=list)
+    frameworks: list[KGExperienceItem] = Field(default_factory=list)
+    tools: list[KGExperienceItem] = Field(default_factory=list)
+
+
+class KGTaxonomyResponse(BaseModel):
+    domains: dict[str, list[str]]
+    skills: dict[str, list[str]]
+    languages: dict[str, list[str]]
+    frameworks: dict[str, dict[str, list[str]]]
+    tools: dict[str, list[str]]

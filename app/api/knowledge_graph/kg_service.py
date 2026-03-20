@@ -20,7 +20,25 @@ from app.api.knowledge_graph.kg_model import (
     Skill,
     Tool,
 )
-from app.api.knowledge_graph.kg_schema import JiraIssueContent, KGExpertiseSummary
+from app.api.knowledge_graph.kg_schema import (
+    JiraIssueContent,
+    KGExperienceItem,
+    KGExperienceProfileResponse,
+    KGExpertiseSummary,
+)
+from app.api.knowledge_graph.kg_taxonomy import (
+    DOMAIN_SLUGS,
+    FRAMEWORK_SLUGS,
+    LANGUAGE_SLUGS,
+    SKILL_SLUGS,
+    TOOL_SLUGS,
+)
+
+DOMAIN_VALUE_MAP = {value.lower(): value for value in DOMAIN_SLUGS}
+SKILL_VALUE_MAP = {value.lower(): value for value in SKILL_SLUGS}
+LANGUAGE_VALUE_MAP = {value.lower(): value for value in LANGUAGE_SLUGS}
+FRAMEWORK_VALUE_MAP = {value.lower(): value for value in FRAMEWORK_SLUGS}
+TOOL_VALUE_MAP = {value.lower(): value for value in TOOL_SLUGS}
 
 
 class KnowledgeGraphService:
@@ -52,6 +70,26 @@ class KnowledgeGraphService:
     @staticmethod
     def _create_or_update_node(model: Any, properties: dict[str, Any]) -> Any:
         return model.create_or_update(properties)[0]
+
+    @staticmethod
+    def _normalize_experience_items(
+        items: list[KGExperienceItem],
+        allowed_values: dict[str, str],
+    ) -> list[KGExperienceItem]:
+        normalized_items: dict[str, KGExperienceItem] = {}
+        for item in items:
+            canonical_name = allowed_values.get(item.name.strip().lower())
+            if canonical_name is None:
+                raise ValueError(f"Unknown taxonomy value: {item.name}")
+            normalized_items[canonical_name.lower()] = KGExperienceItem(
+                name=canonical_name,
+                experience_level=item.experience_level,
+            )
+        return list(normalized_items.values())
+
+    @staticmethod
+    def _sort_experience_items(items: list[KGExperienceItem]) -> list[KGExperienceItem]:
+        return sorted(items, key=lambda item: item.name.lower())
 
     @staticmethod
     def _connect_if_missing(
@@ -146,6 +184,107 @@ class KnowledgeGraphService:
             domains=self._count_entity_values(cast(list[Any], row[3] or [])),
             skills=self._count_entity_values(cast(list[Any], row[4] or [])),
             tools=self._count_entity_values(cast(list[Any], row[5] or [])),
+        )
+
+    def get_resource_experience(
+        self,
+        github_id: int,
+    ) -> KGExperienceProfileResponse:
+        rows, _ = db.cypher_query(
+            """
+            MATCH (r:Resource {github_id: $github_id})
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)-[rel:HAS_EXPERIENCE_WITH]->(node:Domain)
+                RETURN [item IN collect(
+                    CASE
+                        WHEN node IS NULL OR rel IS NULL THEN NULL
+                        ELSE {name: node.slug, experience_level: rel.level}
+                    END
+                ) WHERE item IS NOT NULL] AS domains
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)-[rel:HAS_EXPERIENCE_WITH]->(node:Skill)
+                RETURN [item IN collect(
+                    CASE
+                        WHEN node IS NULL OR rel IS NULL THEN NULL
+                        ELSE {name: node.slug, experience_level: rel.level}
+                    END
+                ) WHERE item IS NOT NULL] AS skills
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)-[rel:HAS_EXPERIENCE_WITH]->(node:Language)
+                RETURN [item IN collect(
+                    CASE
+                        WHEN node IS NULL OR rel IS NULL THEN NULL
+                        ELSE {name: node.name, experience_level: rel.level}
+                    END
+                ) WHERE item IS NOT NULL] AS languages
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)-[rel:HAS_EXPERIENCE_WITH]->(node:Framework)
+                RETURN [item IN collect(
+                    CASE
+                        WHEN node IS NULL OR rel IS NULL THEN NULL
+                        ELSE {name: node.name, experience_level: rel.level}
+                    END
+                ) WHERE item IS NOT NULL] AS frameworks
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)-[rel:HAS_EXPERIENCE_WITH]->(node:Tool)
+                RETURN [item IN collect(
+                    CASE
+                        WHEN node IS NULL OR rel IS NULL THEN NULL
+                        ELSE {name: node.name, experience_level: rel.level}
+                    END
+                ) WHERE item IS NOT NULL] AS tools
+            }
+            RETURN r.login, domains, skills, languages, frameworks, tools
+            """,
+            {"github_id": github_id},
+        )
+
+        if not rows:
+            return KGExperienceProfileResponse(github_id=github_id)
+
+        row = cast(list[Any], rows[0])
+        return KGExperienceProfileResponse(
+            github_id=github_id,
+            github_login=cast(str | None, row[0]),
+            domains=self._sort_experience_items(
+                [
+                    KGExperienceItem.model_validate(item)
+                    for item in cast(list[Any], row[1] or [])
+                ]
+            ),
+            skills=self._sort_experience_items(
+                [
+                    KGExperienceItem.model_validate(item)
+                    for item in cast(list[Any], row[2] or [])
+                ]
+            ),
+            languages=self._sort_experience_items(
+                [
+                    KGExperienceItem.model_validate(item)
+                    for item in cast(list[Any], row[3] or [])
+                ]
+            ),
+            frameworks=self._sort_experience_items(
+                [
+                    KGExperienceItem.model_validate(item)
+                    for item in cast(list[Any], row[4] or [])
+                ]
+            ),
+            tools=self._sort_experience_items(
+                [
+                    KGExperienceItem.model_validate(item)
+                    for item in cast(list[Any], row[5] or [])
+                ]
+            ),
         )
 
     def upsert_pr(self, pr: PullRequestContent, repo_name: str) -> None:
@@ -322,3 +461,97 @@ class KnowledgeGraphService:
             "wants_to_learn_frameworks": len(framework_names),
             "wants_to_learn_tools": len(tool_names),
         }
+
+    def upsert_resource_experience(
+        self,
+        github_id: int,
+        github_login: str | None,
+        domains: list[KGExperienceItem] | None = None,
+        skills: list[KGExperienceItem] | None = None,
+        languages: list[KGExperienceItem] | None = None,
+        frameworks: list[KGExperienceItem] | None = None,
+        tools: list[KGExperienceItem] | None = None,
+    ) -> KGExperienceProfileResponse:
+        resource_props: dict[str, Any] = {"github_id": github_id}
+        if github_login:
+            resource_props["login"] = github_login
+
+        normalized_domains = (
+            self._normalize_experience_items(domains, DOMAIN_VALUE_MAP)
+            if domains is not None
+            else None
+        )
+        normalized_skills = (
+            self._normalize_experience_items(skills, SKILL_VALUE_MAP)
+            if skills is not None
+            else None
+        )
+        normalized_languages = (
+            self._normalize_experience_items(languages, LANGUAGE_VALUE_MAP)
+            if languages is not None
+            else None
+        )
+        normalized_frameworks = (
+            self._normalize_experience_items(frameworks, FRAMEWORK_VALUE_MAP)
+            if frameworks is not None
+            else None
+        )
+        normalized_tools = (
+            self._normalize_experience_items(tools, TOOL_VALUE_MAP)
+            if tools is not None
+            else None
+        )
+
+        resource_node = self._create_or_update_node(Resource, resource_props)
+
+        if normalized_domains is not None:
+            resource_node.has_experience_domain.disconnect_all()
+            for item in normalized_domains:
+                node = self._create_or_update_node(Domain, {"slug": item.name})
+                self._connect_if_missing(
+                    resource_node.has_experience_domain,
+                    node,
+                    {"level": item.experience_level},
+                )
+
+        if normalized_skills is not None:
+            resource_node.has_experience_skill.disconnect_all()
+            for item in normalized_skills:
+                node = self._create_or_update_node(Skill, {"slug": item.name})
+                self._connect_if_missing(
+                    resource_node.has_experience_skill,
+                    node,
+                    {"level": item.experience_level},
+                )
+
+        if normalized_languages is not None:
+            resource_node.has_experience_language.disconnect_all()
+            for item in normalized_languages:
+                node = self._create_or_update_node(Language, {"name": item.name})
+                self._connect_if_missing(
+                    resource_node.has_experience_language,
+                    node,
+                    {"level": item.experience_level},
+                )
+
+        if normalized_frameworks is not None:
+            resource_node.has_experience_framework.disconnect_all()
+            for item in normalized_frameworks:
+                node = self._create_or_update_node(Framework, {"name": item.name})
+                self._connect_if_missing(
+                    resource_node.has_experience_framework,
+                    node,
+                    {"level": item.experience_level},
+                )
+
+        if normalized_tools is not None:
+            resource_node.has_experience_tool.disconnect_all()
+            for item in normalized_tools:
+                node = self._create_or_update_node(Tool, {"name": item.name})
+                self._connect_if_missing(
+                    resource_node.has_experience_tool,
+                    node,
+                    {"level": item.experience_level},
+                )
+
+        return self.get_resource_experience(github_id)
