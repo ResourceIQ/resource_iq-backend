@@ -1,5 +1,8 @@
 name: resource-iq-be
 
+x-google-backend:
+  serviceAccount: ${SERVICE_ACCOUNT_EMAIL}
+
 services:
   resource-iq:
     image: "${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}"
@@ -7,6 +10,7 @@ services:
       - "8080"
     depends_on:
       - redis
+      - cloud-sql-proxy
     environment:
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST}
@@ -20,11 +24,16 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
-      - POSTGRES_PORT=${POSTGRES_PORT}
+
+      # --- DATABASE CONNECTION UPDATES ---
+      - POSTGRES_SERVER=127.0.0.1
+      - POSTGRES_PORT=5432
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_SSL_MODE=${POSTGRES_SSL_MODE}
+      # -----------------------------------
+
       - SENTRY_DSN=${SENTRY_DSN}
       - SMTP_TLS=${SMTP_TLS}
       - SMTP_SSL=${SMTP_SSL}
@@ -50,15 +59,17 @@ services:
       - NEO4J_DATABASE=${NEO4J_DATABASE}
       - AURA_INSTANCEID=${AURA_INSTANCEID}
       - AURA_INSTANCENAME=${AURA_INSTANCENAME}
-      - CLOUD_SQL_CONNECTION_NAME=${CLOUD_SQL_CONNECTION_NAME}
-      - REDIS_HOST=localhost
+      # Notice I removed CLOUD_SQL_CONNECTION_NAME from the app's environment block.
+      # See the warning below as to why!
+
+      - REDIS_HOST=127.0.0.1 # Changed from localhost to 127.0.0.1 to be safe
       - REDIS_PORT=6379
       - REDIS_DB=${REDIS_DB}
       - TASK_STATUS_TTL_SECONDS=${TASK_STATUS_TTL_SECONDS}
     x-google-cloudrun:
       ingress-container: true
       cpu-throttling: false
-      container-port: 8000
+      container-port: 8080
 
   redis:
     image: redis:7-alpine
@@ -72,3 +83,12 @@ services:
       - "no"
       - --port
       - "6379"
+
+  cloud-sql-proxy:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.2
+    ports:
+      - "5432:5432"
+    command:
+      - "--address=0.0.0.0"
+      - "--port=5432"
+      - "${CLOUD_SQL_CONNECTION_NAME}"
