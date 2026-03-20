@@ -32,7 +32,7 @@ jobs:
            docker run --entrypoint /bin/bash test-build -c "alembic heads" && exit 1)
 
   deploy:
-    if: github.event_name != 'pull_request'
+
     needs: build-test
     runs-on: 'ubuntu-latest'
     permissions:
@@ -123,7 +123,7 @@ jobs:
           CLOUDSQL_INSTANCE="${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq"
           IMAGE_URI="${DOCKER_IMAGE_BACKEND}:${TAG}"
 
-          gcloud run services update "${{ env.SERVICE }}" \
+          gcloud beta run services update "${{ env.SERVICE }}" \
             --project "${{ env.PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
             --container "resource-iq" \
