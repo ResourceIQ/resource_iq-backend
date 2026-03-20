@@ -16,6 +16,10 @@ class SimilarityRel(StructuredRel):
     score = FloatProperty(required=True)
 
 
+class ExperienceRel(StructuredRel):
+    level = IntegerProperty(required=True)
+
+
 # --- Node Models ---
 class Resource(StructuredNode):
     github_id = IntegerProperty(unique_index=True, required=True)
@@ -27,6 +31,22 @@ class Resource(StructuredNode):
     wants_to_learn_language = RelationshipTo("Language", "WANTS_TO_LEARN")
     wants_to_learn_framework = RelationshipTo("Framework", "WANTS_TO_LEARN")
     wants_to_learn_tool = RelationshipTo("Tool", "WANTS_TO_LEARN")
+
+    has_experience_domain = RelationshipTo(
+        "Domain", "HAS_EXPERIENCE_WITH", model=ExperienceRel
+    )
+    has_experience_skill = RelationshipTo(
+        "Skill", "HAS_EXPERIENCE_WITH", model=ExperienceRel
+    )
+    has_experience_language = RelationshipTo(
+        "Language", "HAS_EXPERIENCE_WITH", model=ExperienceRel
+    )
+    has_experience_framework = RelationshipTo(
+        "Framework", "HAS_EXPERIENCE_WITH", model=ExperienceRel
+    )
+    has_experience_tool = RelationshipTo(
+        "Tool", "HAS_EXPERIENCE_WITH", model=ExperienceRel
+    )
 
 
 class Component(StructuredNode):
