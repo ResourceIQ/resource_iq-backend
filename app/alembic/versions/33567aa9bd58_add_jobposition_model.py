@@ -28,7 +28,7 @@ def upgrade():
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_job_positions_name'), 'job_positions', ['name'], unique=True)
-    op.drop_table('positions')
+    op.execute("DROP TABLE IF EXISTS positions")
     op.drop_index(op.f('github_pr_vectors_embedding_hnsw_idx'), table_name='github_pr_vectors', postgresql_ops={'embedding': 'vector_cosine_ops'}, postgresql_with={'m': '16', 'ef_construction': '64'}, postgresql_using='hnsw')
     op.add_column('resource_profiles', sa.Column('position_id', sa.Integer(), nullable=True))
     op.create_foreign_key(None, 'resource_profiles', 'job_positions', ['position_id'], ['id'])

@@ -23,7 +23,6 @@ from app.api.integrations.Jira.jira_schema import (
 )
 from app.api.integrations.Jira.jira_service import JiraIntegrationService
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

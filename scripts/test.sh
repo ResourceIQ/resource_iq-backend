@@ -3,6 +3,7 @@
 set -e
 set -x
 
-coverage run -m pytest tests/
+# Run mock-only service tests; avoid root tests/conftest.py DB fixtures.
+coverage run -m pytest tests/services/ --confcutdir=tests/services
 coverage report
 coverage html --title "${@-coverage}"

@@ -21,6 +21,13 @@ class Resource(StructuredNode):
     github_id = IntegerProperty(unique_index=True, required=True)
     login = StringProperty(index=True)
 
+    # User-declared intent relationships.
+    wants_to_work_in = RelationshipTo("Domain", "WANTS_TO_WORK_IN")
+    wants_to_learn_skill = RelationshipTo("Skill", "WANTS_TO_LEARN")
+    wants_to_learn_language = RelationshipTo("Language", "WANTS_TO_LEARN")
+    wants_to_learn_framework = RelationshipTo("Framework", "WANTS_TO_LEARN")
+    wants_to_learn_tool = RelationshipTo("Tool", "WANTS_TO_LEARN")
+
 
 class Component(StructuredNode):
     name = StringProperty(unique_index=True, required=True)

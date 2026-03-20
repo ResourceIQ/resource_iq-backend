@@ -25,6 +25,19 @@ from app.api.knowledge_graph.kg_schema import JiraIssueContent, KGExpertiseSumma
 
 class KnowledgeGraphService:
     @staticmethod
+    def _normalize_unique(values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            cleaned = value.strip()
+            key = cleaned.lower()
+            if not cleaned or key in seen:
+                continue
+            seen.add(key)
+            normalized.append(cleaned)
+        return normalized
+
+    @staticmethod
     def _count_entity_values(values: list[Any]) -> dict[str, int]:
         counts: Counter[str] = Counter()
         for value in values:
@@ -251,3 +264,61 @@ class KnowledgeGraphService:
         for tool_name in entities.tools:
             node = self._create_or_update_node(Tool, {"name": tool_name})
             self._connect_if_missing(pr_node.uses_tool, node)
+
+    def upsert_resource_learning_intent(
+        self,
+        github_id: int,
+        github_login: str | None,
+        entities: ExtractedEntities,
+    ) -> dict[str, int]:
+        """
+        Replace user intent edges with the latest submitted intent.
+
+        We intentionally replace previous intent edges to keep the graph aligned
+        with the user's most recent goals.
+        """
+        resource_props: dict[str, Any] = {"github_id": github_id}
+        if github_login:
+            resource_props["login"] = github_login
+
+        resource_node = self._create_or_update_node(Resource, resource_props)
+
+        resource_node.wants_to_work_in.disconnect_all()
+        resource_node.wants_to_learn_skill.disconnect_all()
+        resource_node.wants_to_learn_language.disconnect_all()
+        resource_node.wants_to_learn_framework.disconnect_all()
+        resource_node.wants_to_learn_tool.disconnect_all()
+
+        domain_slugs = self._normalize_unique(entities.domains)
+        skill_slugs = self._normalize_unique(entities.skills)
+        language_names = self._normalize_unique(entities.languages)
+        framework_names = self._normalize_unique(entities.frameworks)
+        tool_names = self._normalize_unique(entities.tools)
+
+        for domain_slug in domain_slugs:
+            node = self._create_or_update_node(Domain, {"slug": domain_slug})
+            self._connect_if_missing(resource_node.wants_to_work_in, node)
+
+        for skill_slug in skill_slugs:
+            node = self._create_or_update_node(Skill, {"slug": skill_slug})
+            self._connect_if_missing(resource_node.wants_to_learn_skill, node)
+
+        for language_name in language_names:
+            node = self._create_or_update_node(Language, {"name": language_name})
+            self._connect_if_missing(resource_node.wants_to_learn_language, node)
+
+        for framework_name in framework_names:
+            node = self._create_or_update_node(Framework, {"name": framework_name})
+            self._connect_if_missing(resource_node.wants_to_learn_framework, node)
+
+        for tool_name in tool_names:
+            node = self._create_or_update_node(Tool, {"name": tool_name})
+            self._connect_if_missing(resource_node.wants_to_learn_tool, node)
+
+        return {
+            "wants_to_work_in_domains": len(domain_slugs),
+            "wants_to_learn_skills": len(skill_slugs),
+            "wants_to_learn_languages": len(language_names),
+            "wants_to_learn_frameworks": len(framework_names),
+            "wants_to_learn_tools": len(tool_names),
+        }

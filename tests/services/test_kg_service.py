@@ -10,7 +10,6 @@ import pytest
 
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
