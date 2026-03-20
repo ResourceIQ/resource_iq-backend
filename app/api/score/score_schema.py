@@ -45,7 +45,7 @@ class ScoreProfile(SQLModel):
     kg_matches: list[KGMatchInfo] = Field(default_factory=list)
     issue_info: list[IssueScoreInfo] = Field(default_factory=list)
     issue_links: list[str] = Field(default_factory=list)
-    kg_match_details: dict = Field(
+    kg_match_details: dict[str, object] = Field(
         default_factory=dict
     )  # New: frontend-friendly match details
 

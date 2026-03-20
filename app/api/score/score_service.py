@@ -444,7 +444,7 @@ class ScoreService:
 
                 # --- Knowledge Graph score (existing alignment) ---
                 kg_score = 0.0
-                kg_matches = []
+                kg_matches: list[KGMatchInfo] = []
                 if (
                     profile.github_id
                     and not self._disable_kg_scoring
@@ -469,7 +469,7 @@ class ScoreService:
                 wants_learn_bonus = 0.0
                 experience_bonus = 0.0
                 experience_profile = None
-                match_details = {
+                match_details: dict[str, object] = {
                     "experience_matches": {},  # category -> list of {name, experience_level}
                     "wants_to_learn_matches": {},  # category -> list of names
                 }
