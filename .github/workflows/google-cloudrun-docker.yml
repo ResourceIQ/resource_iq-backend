@@ -118,17 +118,18 @@ jobs:
           REDIS_DB: "0"
           TASK_STATUS_TTL_SECONDS: "86400"
         run: |-
-          touch .env
+          set -euo pipefail
 
-          gcloud beta run compose up cloudrun.compose.yaml \
-            --project "${{ env.PROJECT_ID }}" \
-            --region "${{ env.REGION }}" \
-            --quiet
+          CLOUDSQL_INSTANCE="${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq"
+          IMAGE_URI="${DOCKER_IMAGE_BACKEND}:${TAG}"
 
           gcloud run services update "${{ env.SERVICE }}" \
             --project "${{ env.PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
-            --add-cloudsql-instances "${{ env.PROJECT_ID }}:${{ env.REGION }}:resource-iq" \
+            --container "resource-iq" \
+            --image "${IMAGE_URI}" \
+            --add-cloudsql-instances "${CLOUDSQL_INSTANCE}" \
+            --update-env-vars "CLOUD_SQL_CONNECTION_NAME=${CLOUDSQL_INSTANCE}" \
             --quiet
 
       - name: 'Create or Update Migration Job'
