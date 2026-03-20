@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from sqlmodel import select
 from torch import cosine_similarity
 
-from app.api.embedding.embedding_model import GitHubPRVector
+from app.api.embedding.embedding_model import GitHubPRVector, JiraIssueVector
 from app.api.embedding.embedding_service import VectorEmbeddingService
+from app.api.integrations.Jira.jira_model import JiraOAuthToken, JiraOrgIntegration
 from app.api.integrations.Jira.jira_service import JiraIntegrationService
 from app.api.knowledge_graph.kg_extractor import ExtractedEntities, LLMEntityExtractor
 from app.api.knowledge_graph.kg_schema import KGExpertiseSummary
@@ -15,6 +16,7 @@ from app.api.knowledge_graph.kg_service import KnowledgeGraphService
 from app.api.profiles.profile_model import ResourceProfile
 from app.api.score.score_schema import (
     BestFitInput,
+    IssueScoreInfo,
     KGMatchInfo,
     PrScoreInfo,
     ScoreProfile,
@@ -234,6 +236,80 @@ class ScoreService:
 
         return final_score, pr_matches[:3]
 
+    def _resolve_jira_browse_url(self) -> str:
+        """Resolve the browsable Jira site URL from OAuth token, org integration, or settings."""
+        token: JiraOAuthToken | None = self.db.query(JiraOAuthToken).first()
+        if token and token.jira_site_url:
+            return str(token.jira_site_url).rstrip("/")
+
+        integration: JiraOrgIntegration | None = self.db.query(
+            JiraOrgIntegration
+        ).first()
+        if integration and integration.jira_url:
+            return str(integration.jira_url).rstrip("/")
+
+        return (settings.JIRA_URL or "").rstrip("/")
+
+    @staticmethod
+    def _extract_summary_from_context(context: str) -> str:
+        """Extract the SUMMARY field from a Jira issue context string."""
+        for line in context.splitlines():
+            if line.startswith("SUMMARY: "):
+                return line[len("SUMMARY: ") :]
+        return ""
+
+    def _calculate_developer_jira_score(
+        self, jira_account_id: str, task_embedding: list[float], threshold: int
+    ) -> tuple[float, list[IssueScoreInfo]]:
+        """
+        Calculate a similarity-based score for a Jira user.
+        Returns the aggregated score and top matching issues.
+        """
+        jira_filter = cast(Any, JiraIssueVector.assignee_account_id == jira_account_id)
+        issues = (
+            self.db.query(JiraIssueVector)
+            .filter(jira_filter)
+            .order_by(JiraIssueVector.embedding.cosine_distance(task_embedding))
+            .limit(threshold)
+            .all()
+        )
+
+        if not issues:
+            return 0.0, []
+
+        jira_base_url = self._resolve_jira_browse_url()
+
+        task_tensor = torch.tensor(task_embedding, dtype=torch.float)
+        similarities: list[float] = []
+        issue_matches: list[IssueScoreInfo] = []
+        for issue in issues:
+            if issue.embedding is None:
+                continue
+            issue_tensor = torch.tensor(issue.embedding, dtype=torch.float)
+            sim = cosine_similarity(task_tensor, issue_tensor, dim=0)
+            sim_value = float(sim.item())
+            similarities.append(sim_value)
+
+            issue_matches.append(
+                IssueScoreInfo(
+                    issue_key=issue.issue_key,
+                    issue_summary=self._extract_summary_from_context(
+                        issue.context or ""
+                    ),
+                    issue_url=f"{jira_base_url}/browse/{issue.issue_key}"
+                    if jira_base_url
+                    else "",
+                    match_percentage=sim_value * 100.0,
+                )
+            )
+
+        if not similarities:
+            return 0.0, []
+        final_score = self._aggregate_similarity_score(similarities)
+        issue_matches.sort(key=lambda x: x.match_percentage, reverse=True)
+
+        return final_score, issue_matches[:3]
+
     def _calculate_developer_knowledge_graph_score(
         self, github_id: int, task_entities: ExtractedEntities
     ) -> tuple[float, list[KGMatchInfo]]:
@@ -283,29 +359,31 @@ class ScoreService:
     def get_best_fits(self, best_fit_input: BestFitInput) -> list[ScoreProfile]:
         """
         Get the top N Resources best suited for the given task.
-        Returns a list of tuples (user_id, score).
+        Scores each profile using GitHub PRs, Jira issues, and knowledge graph alignment.
         """
         task = f"{best_fit_input.task_title}\n\n{best_fit_input.task_description}"
         top_n = best_fit_input.max_results
-        # Get all profiles
         profiles = self.db.query(ResourceProfile).all()
 
         if not profiles:
             return []
 
-        # Generate task embedding
         embedding_service = VectorEmbeddingService(self.db)
+
         task_embedding = embedding_service.generate_embeddings(
             [task],
             prompt_name=settings.GITHUB_QUERY_PROMPT_NAME,
         )[0]
+
         task_entities = self._extract_task_entities(best_fit_input)
         logger.info("Score task entities extracted: %s", task_entities.to_dict())
         live_jira_workload_by_account = self._get_realtime_jira_workload_map(profiles)
 
-        # Calculate scores for each profile
         scores: list[ScoreProfile] = []
         for profile in profiles:
+            if not profile.github_id and not profile.jira_account_id:
+                continue
+
             stmt = select(User.full_name).where(User.id == profile.user_id)
             user_name = self.db.execute(stmt).scalar() or "Unknown"
             score_profile = ScoreProfile(
@@ -333,43 +411,50 @@ class ScoreService:
             score_profile.availability_score = self._calculate_availability_score(
                 workload_for_availability
             )
-            if not profile.github_id:
-                continue
-            try:
-                github_pr_score, top_prs = self._calculate_developer_github_score(
-                    github_id=profile.github_id,
-                    task_embedding=task_embedding,
-                    threshold=50,  # Consider up to 50 most recent PRs
-                )
-                score_profile.github_pr_score = github_pr_score
-                score_profile.pr_info = top_prs
 
-                if not self._disable_kg_scoring and not task_entities.is_empty():
-                    try:
-                        kg_score, kg_matches = (
-                            self._calculate_developer_knowledge_graph_score(
-                                github_id=profile.github_id,
-                                task_entities=task_entities,
+            try:
+                if profile.github_id:
+                    github_pr_score, top_prs = self._calculate_developer_github_score(
+                        github_id=profile.github_id,
+                        task_embedding=task_embedding,
+                        threshold=50,
+                    )
+                    score_profile.github_pr_score = github_pr_score
+                    score_profile.pr_info = top_prs
+
+                    if not self._disable_kg_scoring and not task_entities.is_empty():
+                        try:
+                            kg_score, kg_matches = (
+                                self._calculate_developer_knowledge_graph_score(
+                                    github_id=profile.github_id,
+                                    task_entities=task_entities,
+                                )
                             )
-                        )
-                        score_profile.knowledge_graph_score = kg_score
-                        score_profile.kg_matches = kg_matches
-                    except Exception:
-                        logger.warning(
-                            "Knowledge graph scoring disabled for this request.",
-                            exc_info=True,
-                        )
-                        self._disable_kg_scoring = True
+                            score_profile.knowledge_graph_score = kg_score
+                            score_profile.kg_matches = kg_matches
+                        except Exception:
+                            logger.warning(
+                                "Knowledge graph scoring disabled for this request.",
+                                exc_info=True,
+                            )
+                            self._disable_kg_scoring = True
+
+                if profile.jira_account_id:
+                    jira_issue_score, top_issues = self._calculate_developer_jira_score(
+                        jira_account_id=profile.jira_account_id,
+                        task_embedding=task_embedding,
+                        threshold=50,
+                    )
+                    score_profile.jira_issue_score = jira_issue_score
+                    score_profile.issue_info = top_issues
 
                 scores.append(score_profile)
             except Exception as e:
-                # Log error but continue with next profile
                 logger.error(
-                    f"Error calculating github_pr_score for user_id {profile.user_id}: {e}"
+                    f"Error calculating scores for user_id {profile.user_id}: {e}"
                 )
                 continue
 
-        # Sort by score descending and return top N
         scores.sort(key=lambda x: x.total_score, reverse=True)
         return scores[:top_n]
 

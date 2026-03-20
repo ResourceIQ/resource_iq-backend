@@ -34,21 +34,21 @@ def service(mock_db: MagicMock) -> ScoreService:
 
 def _make_profile(
     github_id: int | None = 42,
+    jira_account_id: str | None = None,
     user_id: str | None = None,
     position: str | None = "Developer",
     total_workload: int = 0,
-    jira_account_id: str | None = None,
 ) -> MagicMock:
     p = MagicMock()
     p.user_id = user_id or str(uuid4())
     p.github_id = github_id
+    p.jira_account_id = jira_account_id
     if position:
         p.position = MagicMock()
         p.position.name = position
     else:
         p.position = None
     p.total_workload = total_workload
-    p.jira_account_id = jira_account_id
     return p
 
 
@@ -318,7 +318,7 @@ class TestGetBestFits:
 
     @patch.object(ScoreService, "_calculate_developer_github_score")
     @patch("app.api.score.score_service.VectorEmbeddingService")
-    def test_skips_profiles_without_github(
+    def test_skips_profiles_without_any_integration(
         self,
         mock_embed_cls: MagicMock,
         mock_calc_score: MagicMock,
@@ -327,7 +327,7 @@ class TestGetBestFits:
     ) -> None:
         profiles = [
             _make_profile(github_id=1),
-            _make_profile(github_id=None),
+            _make_profile(github_id=None, jira_account_id=None),
         ]
         mock_db.query.return_value.all.return_value = profiles
 
