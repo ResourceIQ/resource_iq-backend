@@ -15,6 +15,7 @@ from app.api.embedding.embedding_service import VectorEmbeddingService
 from app.api.integrations.GitHub.github_model import GithubOrgIntBaseModel
 from app.api.integrations.GitHub.github_schema import (
     GitHubContributor,
+    GitHubDeveloperStats,
     GitHubRepository,
     GitHubSyncResponse,
     GitHubUser,
@@ -461,6 +462,82 @@ class GithubIntegrationService:
             raise
 
         return members_list
+
+    def get_developers_stats(self) -> list[GitHubDeveloperStats]:
+        members = self.get_all_org_members()
+        gh = self.get_github_client()
+        org_name = self.organization_name
+
+        stats_list = []
+        for member in members:
+            try:
+                # Count merged PRs authored by this user
+                merged_query = f"type:pr is:merged author:{member.login} org:{org_name}"
+                merged_count = gh.search_issues(query=merged_query).totalCount
+
+                # Count PRs reviewed by this user (where they submitted a review)
+                reviewed_query = f"type:pr reviewed-by:{member.login} org:{org_name}"
+                reviewed_count = gh.search_issues(query=reviewed_query).totalCount
+
+                stats_list.append(
+                    GitHubDeveloperStats(
+                        login=member.login,
+                        id=member.id,
+                        email=member.email,
+                        name=member.name,
+                        avatar_url=member.avatar_url,
+                        html_url=member.html_url,
+                        merged_prs=merged_count,
+                        reviewed_prs=reviewed_count,
+                    )
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to fetch detailed stats for {member.login}: {e}")
+                # Fallback to member details with 0 stats
+                stats_list.append(
+                    GitHubDeveloperStats(
+                        login=member.login,
+                        id=member.id,
+                        email=member.email,
+                        name=member.name,
+                        avatar_url=member.avatar_url,
+                        html_url=member.html_url,
+                        merged_prs=0,
+                        reviewed_prs=0,
+                    )
+                )
+
+        return stats_list
+
+    def get_developer_stats_by_login(self, login: str) -> GitHubDeveloperStats:
+        gh = self.get_github_client()
+        org_name = self.organization_name
+
+        try:
+            user = gh.get_user(login)
+            
+            # Count merged PRs authored by this user
+            merged_query = f"type:pr is:merged author:{login} org:{org_name}"
+            merged_count = gh.search_issues(query=merged_query).totalCount
+
+            # Count PRs reviewed by this user
+            reviewed_query = f"type:pr reviewed-by:{login} org:{org_name}"
+            reviewed_count = gh.search_issues(query=reviewed_query).totalCount
+
+            return GitHubDeveloperStats(
+                login=user.login,
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                avatar_url=HttpUrl(user.avatar_url) if user.avatar_url else None,
+                html_url=HttpUrl(user.html_url) if user.html_url else None,
+                merged_prs=merged_count,
+                reviewed_prs=reviewed_count,
+            )
+        except Exception as e:
+            logger.error(f"Failed to fetch stats for {login}: {e}")
+            raise Exception(f"Failed to fetch stats for {login}: {str(e)}")
 
     def generate_pr_context(
         self, pr: PullRequest, max_tokens: int = 8000

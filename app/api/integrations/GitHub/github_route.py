@@ -18,6 +18,7 @@ from app.api.integrations.GitHub.github_schema import (
     GitHubSyncResponse,
     GitHubUser,
     PullRequestContent,
+    GitHubDeveloperStats,
 )
 from app.api.integrations.GitHub.github_service import GithubIntegrationService
 from app.api.user.user_model import Role
@@ -386,6 +387,40 @@ async def get_developers(session: SessionDep) -> list[GitHubUser]:
             status_code=400,
             detail=f"Failed to fetch developers: {str(e)}",
         ) from e
+
+
+@router.get(
+    "/developers/{login}/stats",
+    response_model=GitHubDeveloperStats,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
+async def get_developer_stats_by_login(
+    session: SessionDep, login: str
+) -> GitHubDeveloperStats:
+    try:
+        service = GithubIntegrationService(session)
+        return service.get_developer_stats_by_login(login)
+    except Exception as e:
+        logger.error("Failed to fetch developer stats for %s: %s", login, e)
+        raise HTTPException(
+            status_code=404, detail=f"Failed to fetch stats for {login}: {str(e)}"
+        )
+
+
+@router.get(
+    "/developers/stats",
+    response_model=list[GitHubDeveloperStats],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
+async def get_developers_stats(session: SessionDep) -> list[GitHubDeveloperStats]:
+    try:
+        service = GithubIntegrationService(session)
+        return service.get_developers_stats()
+    except Exception as e:
+        logger.error("Failed to fetch developers stats: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch developers stats: {str(e)}"
+        )
 
 
 @router.post(

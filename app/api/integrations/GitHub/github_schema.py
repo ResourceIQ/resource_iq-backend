@@ -12,6 +12,12 @@ class GitHubUser(BaseModel):
     html_url: HttpUrl | None = None
 
 
+class GitHubDeveloperStats(GitHubUser):
+
+    merged_prs: int = 0
+    reviewed_prs: int = 0
+
+
 class PullRequestContent(BaseModel):
     id: int
     number: int
