@@ -69,7 +69,7 @@ services:
     x-google-cloudrun:
       ingress-container: true
       cpu-throttling: false
-      container-port: 8000
+      container-port: 8080
 
   redis:
     image: redis:7-alpine
