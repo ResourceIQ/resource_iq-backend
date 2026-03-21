@@ -8,7 +8,7 @@ from app.api.embedding import embedding_route
 from app.api.integrations.GitHub import github_route, github_webhook
 from app.api.integrations.Jira import jira_route, jira_webhook
 from app.api.knowledge_graph import kg_route
-from app.api.profiles import position_route, profile_route
+from app.api.profiles import position_route, profile_route, team_route
 from app.api.score import score_route
 from app.api.tasks import task_route
 from app.api.user import user_route
@@ -18,6 +18,7 @@ api_router.include_router(auth_route.router)
 api_router.include_router(user_route.router)
 api_router.include_router(profile_route.router)
 api_router.include_router(position_route.router)
+api_router.include_router(team_route.router)
 api_router.include_router(github_webhook.router)
 api_router.include_router(github_route.router)
 api_router.include_router(jira_route.router)

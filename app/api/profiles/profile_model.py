@@ -6,6 +6,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from app.api.profiles.position_model import JobPosition
+    from app.api.profiles.team_model import Team
 
 
 class ResourceProfile(SQLModel, table=True):
@@ -37,6 +38,14 @@ class ResourceProfile(SQLModel, table=True):
         description="Job position ID of the resource",
     )
     position: Optional["JobPosition"] = Relationship(back_populates="profiles")
+
+    # === Team (optional) ===
+    team_id: int | None = Field(
+        default=None,
+        foreign_key="teams.id",
+        description="ID of the team this profile belongs to",
+    )
+    team: Optional["Team"] = Relationship(back_populates="profiles")
 
     # === Jira Integration (optional) ===
     jira_account_id: str | None = Field(
