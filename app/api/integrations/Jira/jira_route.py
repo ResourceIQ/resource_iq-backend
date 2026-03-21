@@ -14,6 +14,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraAuthConnectResponse,
     JiraCreateIssueRequest,
     JiraCreateIssueResponse,
+    JiraDeveloperStats,
     JiraIssueDetailResponse,
     JiraIssueTypeStatusResponse,
     JiraIssueTypeStatusUpdateRequest,
@@ -350,4 +351,24 @@ async def get_jira_live_stats(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch live Jira stats: {str(e)}"
+        )
+
+
+@router.get(
+    "/developers/{account_id}/stats",
+    response_model=JiraDeveloperStats,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
+)
+async def get_developer_stats(
+    session: SessionDep, account_id: str
+) -> JiraDeveloperStats:
+    """Fetch real-time task statistics for a specific Jira user."""
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_developer_stats(account_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch Jira developer stats: {str(e)}"
         )

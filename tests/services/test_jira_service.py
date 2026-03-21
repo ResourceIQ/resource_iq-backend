@@ -1287,3 +1287,52 @@ class TestUpdateIssueTypeSelectedStatuses:
             service.update_issue_type_selected_statuses(
                 "10001", ["NonExistent"]
             )
+
+
+# ===================================================================
+# 11. Developer Stats
+# ===================================================================
+
+class TestGetDeveloperStats:
+    @patch.object(JiraIntegrationService, "get_jira_client")
+    @patch.object(JiraIntegrationService, "_parse_jira_user")
+    def test_get_developer_stats_success(
+        self,
+        mock_parse_user: MagicMock,
+        mock_get_client: MagicMock,
+        service: JiraIntegrationService,
+    ) -> None:
+        # Mock Jira client and user
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        
+        mock_user = JiraUser(
+            account_id="user-123",
+            display_name="Alice",
+            email_address="alice@example.com",
+            active=True
+        )
+        mock_parse_user.return_value = mock_user
+
+        # Mock issues return
+        issue_done = MagicMock()
+        issue_done.fields.status.statusCategory = {"key": "done"}
+        
+        issue_active = MagicMock()
+        issue_active.fields.status.statusCategory = {"key": "indeterminate"}
+        
+        issue_fallback = MagicMock()
+        issue_fallback.fields.status.statusCategory = None
+        issue_fallback.fields.status.name = "Done"
+        
+        mock_client.search_issues.return_value = [issue_done, issue_active, issue_fallback]
+
+        result = service.get_developer_stats("user-123")
+
+        assert result.account_id == "user-123"
+        assert result.solved_tickets == 2  # issue_done and issue_fallback
+        assert result.active_tickets == 1
+        assert result.total_tickets == 3
+        
+        mock_client.search_issues.assert_called_once()
+        assert 'assignee = "user-123"' in mock_client.search_issues.call_args[0][0]

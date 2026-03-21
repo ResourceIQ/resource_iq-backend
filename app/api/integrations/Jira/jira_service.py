@@ -32,6 +32,7 @@ from app.api.integrations.Jira.jira_schema import (
     JiraComment,
     JiraCreateIssueRequest,
     JiraCreateIssueResponse,
+    JiraDeveloperStats,
     JiraIssueContent,
     JiraIssueDetailResponse,
     JiraIssueTypeStatusResponse,
@@ -930,6 +931,59 @@ class JiraIntegrationService:
             tasks_by_status=status_counts,
             tasks_by_priority=priority_counts,
             top_assignees=top_assignees,
+        )
+
+    def get_developer_stats(self, account_id: str) -> JiraDeveloperStats:
+        """Fetch real-time task statistics for a specific Jira user."""
+        client = self.get_jira_client()
+
+        # Build JQL to fetch all issues assigned to this user
+        jql = f'assignee = "{account_id}"'
+
+        # Fetch basic info for the user first to populate JiraUser fields
+        try:
+            user_data = client.user(account_id)
+            jira_user = self._parse_jira_user(user_data)
+            if not jira_user:
+                raise ValueError(f"Could not fetch user data for {account_id}")
+        except Exception as e:
+            logger.error(f"Error fetching Jira user {account_id}: {e}")
+            raise ValueError(f"Failed to fetch Jira user details: {str(e)}")
+
+        # Search for issues to aggregate counts
+        # We fetch minimal fields to be efficient
+        issues = client.search_issues(jql, maxResults=1000, fields=["status"])
+
+        solved_count = 0
+        active_count = 0
+
+        for issue in issues:
+            # Check status category - Done category means solved
+            # jira-python Issue objects have status.statusCategory
+            status_category = getattr(issue.fields.status, "statusCategory", None)
+            if status_category:
+                category_key = status_category.get("key")
+                if category_key == "done":
+                    solved_count += 1
+                else:
+                    active_count += 1
+            else:
+                # Fallback to status name if category not available
+                status_name = issue.fields.status.name
+                if status_name in {"Done", "Closed", "Resolved"}:
+                    solved_count += 1
+                else:
+                    active_count += 1
+
+        return JiraDeveloperStats(
+            account_id=jira_user.account_id,
+            display_name=jira_user.display_name,
+            email_address=jira_user.email_address,
+            avatar_url=jira_user.avatar_url,
+            active=jira_user.active,
+            solved_tickets=solved_count,
+            active_tickets=active_count,
+            total_tickets=len(issues),
         )
 
     def get_live_assignee_workload_map(
