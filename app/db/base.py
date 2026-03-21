@@ -16,3 +16,4 @@ from app.api.integrations.Jira.jira_model import (  # noqa
 # Resource profiles
 from app.api.profiles.position_model import JobPosition  # noqa
 from app.api.profiles.profile_model import ResourceProfile  # noqa
+from app.api.profiles.team_model import Team  # noqa
