@@ -366,7 +366,8 @@ class ScoreService:
     def get_best_fits(self, best_fit_input: BestFitInput) -> list[ScoreProfile]:
         """
         Get the top N Resources best suited for the given task.
-        Scores each profile using GitHub PRs, Jira issues, and knowledge graph alignment.
+        Scores each profile using GitHub PRs, Jira issues, knowledge graph alignment,
+        and explicit "wants to learn" and "has experience" nodes.
         """
         task = f"{best_fit_input.task_title}\n\n{best_fit_input.task_description}"
         top_n = best_fit_input.max_results
@@ -376,7 +377,6 @@ class ScoreService:
             return []
 
         embedding_service = VectorEmbeddingService(self.db)
-
         task_embedding = embedding_service.generate_embeddings(
             [task],
             prompt_name=settings.GITHUB_QUERY_PROMPT_NAME,
@@ -385,6 +385,18 @@ class ScoreService:
         task_entities = self._extract_task_entities(best_fit_input)
         logger.info("Score task entities extracted: %s", task_entities.to_dict())
         live_jira_workload_by_account = self._get_realtime_jira_workload_map(profiles)
+
+        # Normalize task entities for matching
+        task_entities_by_category = {
+            "domains": self._normalize_entity_values(task_entities.domains),
+            "skills": self._normalize_entity_values(task_entities.skills),
+            "languages": self._normalize_entity_values(task_entities.languages),
+            "frameworks": self._normalize_entity_values(task_entities.frameworks),
+            "tools": self._normalize_entity_values(task_entities.tools),
+        }
+
+        # Bonus weights
+        EXPERIENCE_BONUS_BASE = 20.0  # Multiplied by (experience_level / 10)
 
         scores: list[ScoreProfile] = []
         for profile in profiles:
@@ -420,6 +432,7 @@ class ScoreService:
             )
 
             try:
+                # --- GitHub PR score ---
                 if profile.github_id:
                     github_pr_score, top_prs = self._calculate_developer_github_score(
                         github_id=profile.github_id,
@@ -429,24 +442,86 @@ class ScoreService:
                     score_profile.github_pr_score = github_pr_score
                     score_profile.pr_info = top_prs
 
-                    if not self._disable_kg_scoring and not task_entities.is_empty():
-                        try:
-                            kg_score, kg_matches = (
-                                self._calculate_developer_knowledge_graph_score(
-                                    user_id=profile.user_id,
-                                    github_id=profile.github_id,
-                                    task_entities=task_entities,
-                                )
+                # --- Knowledge Graph score (existing alignment) ---
+                kg_score = 0.0
+                kg_matches: list[KGMatchInfo] = []
+                if (
+                    profile.github_id
+                    and not self._disable_kg_scoring
+                    and not task_entities.is_empty()
+                ):
+                    try:
+                        kg_score, kg_matches = (
+                            self._calculate_developer_knowledge_graph_score(
+                                user_id=profile.user_id,
+                                github_id=profile.github_id,
+                                task_entities=task_entities,
                             )
-                            score_profile.knowledge_graph_score = kg_score
-                            score_profile.kg_matches = kg_matches
-                        except Exception:
-                            logger.warning(
-                                "Knowledge graph scoring disabled for this request.",
-                                exc_info=True,
-                            )
-                            self._disable_kg_scoring = True
+                        )
+                    except Exception:
+                        logger.warning(
+                            "Knowledge graph scoring disabled for this request.",
+                            exc_info=True,
+                        )
+                        self._disable_kg_scoring = True
 
+                # --- New: Wants to Learn & Experience Bonus + Matched Node Details ---
+                wants_learn_bonus = 0.0
+                experience_bonus = 0.0
+                experience_profile = None
+                match_details: dict[str, Any] = {
+                    "experience_matches": {},  # category -> list of {name, experience_level}
+                    "wants_to_learn_matches": {},  # category -> list of names
+                }
+                if self.kg_service is not None and profile.github_id:
+                    try:
+                        experience_profile = self.kg_service.get_resource_experience(
+                            github_id=profile.github_id,
+                            user_id=str(profile.user_id),
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to fetch experience for user {profile.user_id}: {e}"
+                        )
+
+                if experience_profile:
+                    for category in [
+                        "domains",
+                        "skills",
+                        "languages",
+                        "frameworks",
+                        "tools",
+                    ]:
+                        task_values = set(task_entities_by_category[category])
+                        # Experience matches
+                        experience_items = getattr(experience_profile, category, [])
+                        matched_exp = []
+                        for item in experience_items:
+                            if item.name.strip().lower() in task_values:
+                                experience_bonus += EXPERIENCE_BONUS_BASE * (
+                                    item.experience_level / 10.0
+                                )
+                                matched_exp.append(
+                                    {
+                                        "name": item.name,
+                                        "experience_level": item.experience_level,
+                                    }
+                                )
+                        if matched_exp:
+                            match_details["experience_matches"][category] = matched_exp
+                        # Wants to learn matches (placeholder, see below)
+                        # If you have a method to fetch wants_to_learn entities, add here
+                        # For now, this is left empty
+
+                # TODO: If you have a method to fetch wants_to_learn entities, populate match_details["wants_to_learn_matches"]
+
+                score_profile.knowledge_graph_score = (
+                    kg_score + wants_learn_bonus + experience_bonus
+                )
+                score_profile.kg_matches = kg_matches
+                score_profile.kg_match_details = match_details
+
+                # --- Jira Issue Score ---
                 if profile.jira_account_id:
                     jira_issue_score, top_issues = self._calculate_developer_jira_score(
                         jira_account_id=profile.jira_account_id,
