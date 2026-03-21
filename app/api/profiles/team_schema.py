@@ -1,12 +1,11 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
 
 class TeamBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class TeamCreate(TeamBase):
@@ -14,8 +13,8 @@ class TeamCreate(TeamBase):
 
 
 class TeamUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
 
 
 class TeamResponse(TeamBase):
