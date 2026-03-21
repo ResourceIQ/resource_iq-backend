@@ -469,7 +469,7 @@ class ScoreService:
                 wants_learn_bonus = 0.0
                 experience_bonus = 0.0
                 experience_profile = None
-                match_details: dict[str, object] = {
+                match_details: dict[str, Any] = {
                     "experience_matches": {},  # category -> list of {name, experience_level}
                     "wants_to_learn_matches": {},  # category -> list of names
                 }
