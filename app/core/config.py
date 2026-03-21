@@ -20,7 +20,7 @@ def parse_cors(v: Any) -> list[str] | str:
     if isinstance(v, str) and not v.startswith("["):
         return [i.strip() for i in v.split(",") if i.strip()]
     elif isinstance(v, str) and v.startswith("["):
-        return json.loads(v)
+        return cast(list[str] | str, json.loads(v))
     elif isinstance(v, list | str):
         return v
     raise ValueError(v)
