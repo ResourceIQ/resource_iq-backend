@@ -1688,15 +1688,21 @@ class JiraIntegrationService:
         jql = f'assignee = "{account_id}"{status_filter} ORDER BY updated DESC'
         logger.info(f"Fetching developer issues with JQL: {jql}")
 
-        issues = self.fetch_issues(jql=jql, max_results=max_results, include_closed=include_done)
+        issues = self.fetch_issues(
+            jql=jql, max_results=max_results, include_closed=include_done
+        )
 
         result: list[JiraAssignedIssue] = []
         for issue in issues:
             fields = issue.fields
             issue_key = issue.key
             summary = getattr(fields, "summary", "") or ""
-            status = getattr(getattr(fields, "status", None), "name", "Unknown") or "Unknown"
-            issue_type = getattr(getattr(fields, "issuetype", None), "name", "Task") or "Task"
+            status = (
+                getattr(getattr(fields, "status", None), "name", "Unknown") or "Unknown"
+            )
+            issue_type = (
+                getattr(getattr(fields, "issuetype", None), "name", "Task") or "Task"
+            )
             issue_url = f"{self.jira_url}/browse/{issue_key}"
             result.append(
                 JiraAssignedIssue(

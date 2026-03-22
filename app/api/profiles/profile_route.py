@@ -135,7 +135,7 @@ async def list_profiles(
 ) -> list[ResourceProfileResponse]:
     """List all resource profiles with optional filters."""
     query = session.query(ResourceProfile).options(
-        selectinload(ResourceProfile.position)
+        selectinload(cast(Any, ResourceProfile.position))
     )
 
     if has_jira is True:

@@ -9,9 +9,9 @@ from fastapi.responses import RedirectResponse
 
 from app.api.integrations.Jira.jira_model import JiraOAuthToken
 from app.api.integrations.Jira.jira_schema import (
+    JiraAssignedIssue,
     JiraAssignIssueRequest,
     JiraAssignIssueResponse,
-    JiraAssignedIssue,
     JiraAuthConnectResponse,
     JiraCreateIssueRequest,
     JiraCreateIssueResponse,
@@ -406,7 +406,9 @@ async def get_developer_issues(
     session: SessionDep,
     account_id: str,
     max_results: int = Query(default=50, ge=1, le=200),
-    include_done: bool = Query(default=False, description="Include completed/done issues"),
+    include_done: bool = Query(
+        default=False, description="Include completed/done issues"
+    ),
 ) -> list[JiraAssignedIssue]:
     try:
         jira_service = JiraIntegrationService(session)
