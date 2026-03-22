@@ -392,7 +392,7 @@ async def get_developers(session: SessionDep) -> list[GitHubUser]:
 @router.get(
     "/developers/{login}/stats",
     response_model=GitHubDeveloperStats,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
 )
 async def get_developer_stats_by_login(
     session: SessionDep, login: str
