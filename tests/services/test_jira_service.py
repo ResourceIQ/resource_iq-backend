@@ -1317,22 +1317,42 @@ class TestGetDeveloperStats:
         # Mock issues return
         issue_done = MagicMock()
         issue_done.fields.status.statusCategory = {"key": "done"}
+        issue_done.fields.status.name = "Done"
         
         issue_active = MagicMock()
         issue_active.fields.status.statusCategory = {"key": "indeterminate"}
+        issue_active.fields.status.name = "In Progress"
+
+        issue_todo = MagicMock()
+        issue_todo.fields.status.statusCategory = {"key": "new"}
+        issue_todo.fields.status.name = "To Do"
+
+        issue_pr = MagicMock()
+        issue_pr.fields.status.statusCategory = {"key": "indeterminate"}
+        issue_pr.fields.status.name = "PR Review"
         
         issue_fallback = MagicMock()
         issue_fallback.fields.status.statusCategory = None
         issue_fallback.fields.status.name = "Done"
         
-        mock_client.search_issues.return_value = [issue_done, issue_active, issue_fallback]
+        mock_client.search_issues.side_effect = [
+            [issue_done, issue_active, issue_todo, issue_pr, issue_fallback], # First call: assigned
+            [MagicMock(), MagicMock()] # Second call: reported bugs
+        ]
 
         result = service.get_developer_stats("user-123")
 
         assert result.account_id == "user-123"
         assert result.solved_tickets == 2  # issue_done and issue_fallback
-        assert result.active_tickets == 1
-        assert result.total_tickets == 3
+        assert result.active_tickets == 3
+        assert result.todo_tickets == 1
+        assert result.inprogress_tickets == 1
+        assert result.pr_review_tickets == 1
+        assert result.done_tickets == 2
+        assert result.total_tickets == 5
+        assert result.bugs_reported == 2
         
-        mock_client.search_issues.assert_called_once()
-        assert 'assignee = "user-123"' in mock_client.search_issues.call_args[0][0]
+        assert mock_client.search_issues.call_count == 2
+        calls = mock_client.search_issues.call_args_list
+        assert 'assignee = "user-123"' in calls[0][0][0]
+        assert 'issuetype = Bug' in calls[1][0][0]

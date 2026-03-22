@@ -950,14 +950,34 @@ class JiraIntegrationService:
             logger.error(f"Error fetching Jira user {account_id}: {e}")
             raise ValueError(f"Failed to fetch Jira user details: {str(e)}")
 
-        # Search for issues to aggregate counts
-        # We fetch minimal fields to be efficient
-        issues = client.search_issues(jql, maxResults=1000, fields=["status"])
+        # Search for issues to aggregate counts:
+        # 1. Issues assigned to the user
+        assigned_issues = client.search_issues(jql, maxResults=1000, fields=["status"])
+        
+        # 2. Issues reported by the user (bugs)
+        bugs_query = f'reporter = "{account_id}" AND issuetype = Bug'
+        reported_bugs = client.search_issues(bugs_query, maxResults=1000, fields=["id"])
 
         solved_count = 0
         active_count = 0
+        todo_count = 0
+        inprogress_count = 0
+        pr_review_count = 0
+        done_count = 0
 
-        for issue in issues:
+        for issue in assigned_issues:
+            status_name = issue.fields.status.name.lower()
+            
+            # Mapping status names to specific buckets
+            if any(s in status_name for s in ["to do", "backlog", "open"]):
+                todo_count += 1
+            elif "in progress" in status_name:
+                inprogress_count += 1
+            elif any(s in status_name for s in ["pr review", "in review", "review", "testing", "qa"]):
+                pr_review_count += 1
+            elif any(s in status_name for s in ["done", "closed", "resolved"]):
+                done_count += 1
+
             # Check status category - Done category means solved
             # jira-python Issue objects have status.statusCategory
             status_category = getattr(issue.fields.status, "statusCategory", None)
@@ -969,8 +989,7 @@ class JiraIntegrationService:
                     active_count += 1
             else:
                 # Fallback to status name if category not available
-                status_name = issue.fields.status.name
-                if status_name in {"Done", "Closed", "Resolved"}:
+                if status_name in {"done", "closed", "resolved"}:
                     solved_count += 1
                 else:
                     active_count += 1
@@ -981,9 +1000,14 @@ class JiraIntegrationService:
             email_address=jira_user.email_address,
             avatar_url=jira_user.avatar_url,
             active=jira_user.active,
+            todo_tickets=todo_count,
+            inprogress_tickets=inprogress_count,
+            pr_review_tickets=pr_review_count,
+            done_tickets=done_count,
             solved_tickets=solved_count,
             active_tickets=active_count,
-            total_tickets=len(issues),
+            total_tickets=len(assigned_issues),
+            bugs_reported=len(reported_bugs),
         )
 
     def get_live_assignee_workload_map(
