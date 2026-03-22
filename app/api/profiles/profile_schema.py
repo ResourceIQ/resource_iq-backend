@@ -52,6 +52,7 @@ class ResourceProfileResponse(BaseModel):
     phone_number: str | None = None
     address: str | None = None
     position_id: int | None = None
+    position: str | None = None
 
     # Jira
 

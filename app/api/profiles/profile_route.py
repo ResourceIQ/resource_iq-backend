@@ -4,6 +4,8 @@ import uuid
 from datetime import datetime
 from typing import Any, cast
 
+from sqlalchemy.orm import selectinload
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.profiles.profile_model import ResourceProfile
@@ -31,6 +33,7 @@ def _to_response(profile: ResourceProfile) -> ResourceProfileResponse:
         phone_number=profile.phone_number,
         address=profile.address,
         position_id=profile.position_id,
+        position=profile.position.name if profile.position else None,
         jira_account_id=profile.jira_account_id,
         jira_display_name=profile.jira_display_name,
         jira_email=profile.jira_email,
@@ -132,7 +135,7 @@ async def list_profiles(
     limit: int = Query(default=50, ge=1, le=500),
 ) -> list[ResourceProfileResponse]:
     """List all resource profiles with optional filters."""
-    query = session.query(ResourceProfile)
+    query = session.query(ResourceProfile).options(selectinload(ResourceProfile.position))
 
     if has_jira is True:
         query = query.filter(cast(Any, ResourceProfile.jira_account_id).isnot(None))
