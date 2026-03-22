@@ -4,22 +4,22 @@ import uuid
 from datetime import datetime
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import selectinload
+# from fastapi import APIRouter, Depends, HTTPException, Query
+# from sqlalchemy.orm import selectinload
 
-from app.api.profiles.profile_model import ResourceProfile
-from app.api.profiles.profile_schema import (
-    GitHubConnectionRequest,
-    JiraConnectionRequest,
-    ProfileMatchResponse,
-    ProfileWorkload,
-    ResourceProfileCreate,
-    ResourceProfileResponse,
-    UpdateSkillsRequest,
-)
-from app.api.profiles.profile_service import ProfileService
-from app.api.user.user_model import Role
-from app.utils.deps import CurrentUser, RoleChecker, SessionDep
+# from app.api.profiles.profile_model import ResourceProfile
+# from app.api.profiles.profile_schema import (
+#     GitHubConnectionRequest,
+#     JiraConnectionRequest,
+#     ProfileMatchResponse,
+#     ProfileWorkload,
+#     ResourceProfileCreate,
+#     ResourceProfileResponse,
+#     UpdateSkillsRequest,
+# )
+# from app.api.profiles.profile_service import ProfileService
+# from app.api.user.user_model import Role
+# from app.utils.deps import CurrentUser, RoleChecker, SessionDep
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
