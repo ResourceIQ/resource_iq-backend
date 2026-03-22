@@ -11,8 +11,10 @@ from app.api.knowledge_graph.kg_schema import (
     KGExperienceProfileResponse,
     KGExperienceUpdateRequest,
     KGLearningIntentEntities,
+    KGLearningIntentProfileResponse,
     KGLearningIntentRequest,
     KGLearningIntentResponse,
+    KGPRInsightsResponse,
     KGTaxonomyResponse,
 )
 from app.api.knowledge_graph.kg_service import KnowledgeGraphService
@@ -160,16 +162,36 @@ async def get_taxonomy() -> KGTaxonomyResponse:
 
 
 @router.get(
+    "/experience/me",
+    response_model=KGExperienceProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
+)
+async def get_my_resource_experience(
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> KGExperienceProfileResponse:
+    """Return has-experience edges for the current user (self-service)."""
+    profile = _get_profile_by_current_user(session, current_user)
+    graph_service = KnowledgeGraphService()
+    return graph_service.get_resource_experience(
+        github_id=profile.github_id,
+        user_id=str(profile.user_id),
+    )
+
+
+@router.get(
     "/experience/{github_id}",
     response_model=KGExperienceProfileResponse,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
 )
 async def get_resource_experience(
     session: SessionDep,
     github_id: int,
 ) -> KGExperienceProfileResponse:
     """
-    Return the experience profile for a resource (by GitHub ID). Admin/Moderator only.
+    Return the experience profile (HAS_EXPERIENCE_WITH edges) for a resource (by GitHub ID).
+
+    Authenticated users (same visibility as resource profiles).
 
     **Response Example:**
     ```json
@@ -210,7 +232,7 @@ async def get_resource_experience(
 @router.get(
     "/experience/user/{user_id}",
     response_model=KGExperienceProfileResponse,
-    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
 )
 async def get_resource_experience_by_user(
     session: SessionDep,
@@ -354,6 +376,123 @@ async def update_resource_experience_by_user(
     )
 
     return response
+
+
+@router.get(
+    "/learning-intent/me",
+    response_model=KGLearningIntentProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
+)
+async def get_my_resource_learning_intent(
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> KGLearningIntentProfileResponse:
+    """Return wants-to-learn / learning-intent edges for the current user (self-service)."""
+    profile = _get_profile_by_current_user(session, current_user)
+    graph_service = KnowledgeGraphService()
+    return graph_service.get_resource_learning_intent(
+        github_id=profile.github_id,
+        user_id=str(profile.user_id),
+    )
+
+
+@router.get(
+    "/learning-intent/{github_id}",
+    response_model=KGLearningIntentProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
+)
+async def get_resource_learning_intent(
+    session: SessionDep,
+    github_id: int,
+) -> KGLearningIntentProfileResponse:
+    """
+    Return the learning intent (WANTS_TO_LEARN / WANTS_TO_WORK_IN) edges for a resource (by GitHub ID).
+
+    Authenticated users (same visibility as resource profiles).
+    """
+    profile = _get_profile_by_github_id(session, github_id)
+    graph_service = KnowledgeGraphService()
+    return graph_service.get_resource_learning_intent(
+        github_id=profile.github_id,
+        user_id=str(profile.user_id),
+    )
+
+
+@router.get(
+    "/learning-intent/user/{user_id}",
+    response_model=KGLearningIntentProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
+)
+async def get_resource_learning_intent_by_user(
+    session: SessionDep,
+    user_id: UUID,
+) -> KGLearningIntentProfileResponse:
+    """Return the learning intent edges for a resource by user ID."""
+    profile = _get_profile_by_user_id(session, user_id)
+    graph_service = KnowledgeGraphService()
+    return graph_service.get_resource_learning_intent(
+        github_id=profile.github_id,
+        user_id=str(profile.user_id),
+    )
+
+
+@router.get(
+    "/prs/me",
+    response_model=KGPRInsightsResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
+)
+async def get_my_resource_pr_insights(
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> KGPRInsightsResponse:
+    """Return PR ingestion insights for the current user (self-service)."""
+    profile = _get_profile_by_current_user(session, current_user)
+    graph_service = KnowledgeGraphService()
+    return graph_service.get_resource_prs(
+        github_id=profile.github_id,
+        user_id=str(profile.user_id),
+    )
+
+
+@router.get(
+    "/prs/{github_id}",
+    response_model=KGPRInsightsResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
+)
+async def get_resource_pr_insights(
+    session: SessionDep,
+    github_id: int,
+) -> KGPRInsightsResponse:
+    """
+    Return PR ingestion data from the knowledge graph for a resource (by GitHub ID).
+    Includes per-PR extracted entities and aggregated counts.
+
+    Authenticated users (same visibility as resource profiles).
+    """
+    profile = _get_profile_by_github_id(session, github_id)
+    graph_service = KnowledgeGraphService()
+    return graph_service.get_resource_prs(
+        github_id=profile.github_id,
+        user_id=str(profile.user_id),
+    )
+
+
+@router.get(
+    "/prs/user/{user_id}",
+    response_model=KGPRInsightsResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
+)
+async def get_resource_pr_insights_by_user(
+    session: SessionDep,
+    user_id: UUID,
+) -> KGPRInsightsResponse:
+    """Return PR ingestion data from the knowledge graph by user ID."""
+    profile = _get_profile_by_user_id(session, user_id)
+    graph_service = KnowledgeGraphService()
+    return graph_service.get_resource_prs(
+        github_id=profile.github_id,
+        user_id=str(profile.user_id),
+    )
 
 
 @router.post("/intent/me", response_model=KGLearningIntentResponse)

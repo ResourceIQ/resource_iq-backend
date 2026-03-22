@@ -117,6 +117,45 @@ class KGExperienceProfileResponse(BaseModel):
     tools: list[KGExperienceItem] = Field(default_factory=list)
 
 
+class KGLearningIntentProfileResponse(BaseModel):
+    user_id: str | None = None
+    profile_id: int | None = None
+    github_id: int | None = None
+    github_login: str | None = None
+    wants_to_work_in_domains: list[str] = Field(default_factory=list)
+    wants_to_learn_skills: list[str] = Field(default_factory=list)
+    wants_to_learn_languages: list[str] = Field(default_factory=list)
+    wants_to_learn_frameworks: list[str] = Field(default_factory=list)
+    wants_to_learn_tools: list[str] = Field(default_factory=list)
+
+
+class KGPRItem(BaseModel):
+    identifier: int
+    number: int | None = None
+    title: str | None = None
+    url: str | None = None
+    repo: str | None = None
+    languages: list[str] = Field(default_factory=list)
+    frameworks: list[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
+
+
+class KGPRInsightsResponse(BaseModel):
+    user_id: str | None = None
+    profile_id: int | None = None
+    github_id: int | None = None
+    github_login: str | None = None
+    total_prs: int = 0
+    prs: list[KGPRItem] = Field(default_factory=list)
+    aggregated_languages: dict[str, int] = Field(default_factory=dict)
+    aggregated_frameworks: dict[str, int] = Field(default_factory=dict)
+    aggregated_domains: dict[str, int] = Field(default_factory=dict)
+    aggregated_skills: dict[str, int] = Field(default_factory=dict)
+    aggregated_tools: dict[str, int] = Field(default_factory=dict)
+
+
 class KGTaxonomyResponse(BaseModel):
     domains: dict[str, list[str]]
     skills: dict[str, list[str]]
