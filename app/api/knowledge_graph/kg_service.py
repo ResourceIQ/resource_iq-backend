@@ -25,6 +25,9 @@ from app.api.knowledge_graph.kg_schema import (
     KGExperienceItem,
     KGExperienceProfileResponse,
     KGExpertiseSummary,
+    KGLearningIntentProfileResponse,
+    KGPRInsightsResponse,
+    KGPRItem,
     KGResourceSnapshot,
 )
 from app.api.knowledge_graph.kg_taxonomy import (
@@ -665,3 +668,184 @@ class KnowledgeGraphService:
                 )
 
         return self.get_resource_experience(github_id=github_id, user_id=user_id)
+
+    def get_resource_learning_intent(
+        self,
+        github_id: int | None = None,
+        user_id: str | None = None,
+    ) -> KGLearningIntentProfileResponse:
+        if user_id is None and github_id is None:
+            return KGLearningIntentProfileResponse()
+
+        query = (
+            self._resource_match_prefix()
+            + """
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)-[:WANTS_TO_WORK_IN]->(d:Domain)
+                RETURN [v IN collect(d.slug) WHERE v IS NOT NULL] AS domains
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)-[:WANTS_TO_LEARN]->(s:Skill)
+                RETURN [v IN collect(s.slug) WHERE v IS NOT NULL] AS skills
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)-[:WANTS_TO_LEARN]->(l:Language)
+                RETURN [v IN collect(l.name) WHERE v IS NOT NULL] AS languages
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)-[:WANTS_TO_LEARN]->(f:Framework)
+                RETURN [v IN collect(f.name) WHERE v IS NOT NULL] AS frameworks
+            }
+            CALL {
+                WITH r
+                OPTIONAL MATCH (r)-[:WANTS_TO_LEARN]->(t:Tool)
+                RETURN [v IN collect(t.name) WHERE v IS NOT NULL] AS tools
+            }
+            RETURN r.user_id, r.profile_id, r.github_id, r.login,
+                   domains, skills, languages, frameworks, tools
+            """
+        )
+
+        rows, _ = db.cypher_query(
+            query,
+            {"user_id": user_id, "github_id": github_id},
+        )
+
+        if not rows:
+            return KGLearningIntentProfileResponse(
+                user_id=user_id,
+                github_id=github_id,
+            )
+
+        row = cast(list[Any], rows[0])
+        return KGLearningIntentProfileResponse(
+            user_id=cast(str | None, row[0]),
+            profile_id=cast(int | None, row[1]),
+            github_id=cast(int | None, row[2]) or github_id,
+            github_login=cast(str | None, row[3]),
+            wants_to_work_in_domains=cast(list[str], row[4] or []),
+            wants_to_learn_skills=cast(list[str], row[5] or []),
+            wants_to_learn_languages=cast(list[str], row[6] or []),
+            wants_to_learn_frameworks=cast(list[str], row[7] or []),
+            wants_to_learn_tools=cast(list[str], row[8] or []),
+        )
+
+    def get_resource_prs(
+        self,
+        github_id: int | None = None,
+        user_id: str | None = None,
+    ) -> KGPRInsightsResponse:
+        if user_id is None and github_id is None:
+            return KGPRInsightsResponse()
+
+        query = (
+            self._resource_match_prefix()
+            + """
+            OPTIONAL MATCH (r)<-[:AUTHORED_BY]-(pr:PR)
+            WITH r, pr ORDER BY pr.number DESC
+            WITH r, collect(pr) AS prs
+            UNWIND CASE WHEN size(prs) = 0 THEN [null] ELSE prs END AS pr
+            CALL {
+                WITH pr
+                WITH pr WHERE pr IS NOT NULL
+                OPTIONAL MATCH (pr)-[:USES_LANGUAGE]->(l:Language)
+                RETURN [v IN collect(DISTINCT l.name) WHERE v IS NOT NULL] AS langs
+            }
+            CALL {
+                WITH pr
+                WITH pr WHERE pr IS NOT NULL
+                OPTIONAL MATCH (pr)-[:USES_FRAMEWORK]->(f:Framework)
+                RETURN [v IN collect(DISTINCT f.name) WHERE v IS NOT NULL] AS fws
+            }
+            CALL {
+                WITH pr
+                WITH pr WHERE pr IS NOT NULL
+                OPTIONAL MATCH (pr)-[:TOUCHES_DOMAIN]->(d:Domain)
+                RETURN [v IN collect(DISTINCT d.slug) WHERE v IS NOT NULL] AS doms
+            }
+            CALL {
+                WITH pr
+                WITH pr WHERE pr IS NOT NULL
+                OPTIONAL MATCH (pr)-[:DEMONSTRATES_SKILL]->(s:Skill)
+                RETURN [v IN collect(DISTINCT s.slug) WHERE v IS NOT NULL] AS skls
+            }
+            CALL {
+                WITH pr
+                WITH pr WHERE pr IS NOT NULL
+                OPTIONAL MATCH (pr)-[:USES_TOOL]->(t:Tool)
+                RETURN [v IN collect(DISTINCT t.name) WHERE v IS NOT NULL] AS tls
+            }
+            RETURN r.user_id, r.profile_id, r.github_id, r.login,
+                   pr.identifier, pr.number, pr.title, pr.url, pr.repo,
+                   langs, fws, doms, skls, tls
+            """
+        )
+
+        rows, _ = db.cypher_query(
+            query,
+            {"user_id": user_id, "github_id": github_id},
+        )
+
+        if not rows:
+            return KGPRInsightsResponse(user_id=user_id, github_id=github_id)
+
+        first = cast(list[Any], rows[0])
+        resp_user_id = cast(str | None, first[0])
+        resp_profile_id = cast(int | None, first[1])
+        resp_github_id = cast(int | None, first[2]) or github_id
+        resp_login = cast(str | None, first[3])
+
+        pr_items: list[KGPRItem] = []
+        agg_langs: Counter[str] = Counter()
+        agg_fws: Counter[str] = Counter()
+        agg_doms: Counter[str] = Counter()
+        agg_skls: Counter[str] = Counter()
+        agg_tls: Counter[str] = Counter()
+
+        for row in rows:
+            r = cast(list[Any], row)
+            if r[4] is None:
+                continue
+            langs = cast(list[str], r[9] or [])
+            fws = cast(list[str], r[10] or [])
+            doms = cast(list[str], r[11] or [])
+            skls = cast(list[str], r[12] or [])
+            tls = cast(list[str], r[13] or [])
+
+            pr_items.append(
+                KGPRItem(
+                    identifier=int(r[4]),
+                    number=int(r[5]) if r[5] is not None else None,
+                    title=cast(str | None, r[6]),
+                    url=cast(str | None, r[7]),
+                    repo=cast(str | None, r[8]),
+                    languages=langs,
+                    frameworks=fws,
+                    domains=doms,
+                    skills=skls,
+                    tools=tls,
+                )
+            )
+            agg_langs.update(langs)
+            agg_fws.update(fws)
+            agg_doms.update(doms)
+            agg_skls.update(skls)
+            agg_tls.update(tls)
+
+        return KGPRInsightsResponse(
+            user_id=resp_user_id,
+            profile_id=resp_profile_id,
+            github_id=resp_github_id,
+            github_login=resp_login,
+            total_prs=len(pr_items),
+            prs=pr_items,
+            aggregated_languages=dict(agg_langs),
+            aggregated_frameworks=dict(agg_fws),
+            aggregated_domains=dict(agg_doms),
+            aggregated_skills=dict(agg_skls),
+            aggregated_tools=dict(agg_tls),
+        )
