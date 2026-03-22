@@ -229,3 +229,11 @@ class JiraDeveloperStats(JiraUser):
     bugs_reported: int = Field(
         default=0, description="Number of tickets with type 'Bug' reported by this user"
     )
+
+
+class JiraAssignedIssue(BaseModel):
+    issue_key: str = Field(..., description="Issue key, e.g. PROJ-42")
+    summary: str = Field(..., description="Issue title / summary")
+    status: str = Field(..., description="Current status name")
+    issue_type: str = Field(..., description="Issue type, e.g. Task, Bug, Story")
+    issue_url: str = Field(..., description="Browse URL for the issue")

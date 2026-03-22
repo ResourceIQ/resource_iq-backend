@@ -24,6 +24,7 @@ from app.api.integrations.Jira.jira_model import (
     JiraOrgIntegration,
 )
 from app.api.integrations.Jira.jira_schema import (
+    JiraAssignedIssue,
     JiraAssigneeStats,
     JiraAssignIssueRequest,
     JiraAssignIssueResponse,
@@ -1674,5 +1675,37 @@ class JiraIntegrationService:
         except Exception as e:
             logger.error(f"Error processing webhook: {str(e)}")
             result["error"] = str(e)
+
+        return result
+
+    def get_developer_issues(
+        self,
+        account_id: str,
+        max_results: int = 50,
+        include_done: bool = False,
+    ) -> list[JiraAssignedIssue]:
+        status_filter = "" if include_done else " AND statusCategory != Done"
+        jql = f'assignee = "{account_id}"{status_filter} ORDER BY updated DESC'
+        logger.info(f"Fetching developer issues with JQL: {jql}")
+
+        issues = self.fetch_issues(jql=jql, max_results=max_results, include_closed=include_done)
+
+        result: list[JiraAssignedIssue] = []
+        for issue in issues:
+            fields = issue.fields
+            issue_key = issue.key
+            summary = getattr(fields, "summary", "") or ""
+            status = getattr(getattr(fields, "status", None), "name", "Unknown") or "Unknown"
+            issue_type = getattr(getattr(fields, "issuetype", None), "name", "Task") or "Task"
+            issue_url = f"{self.jira_url}/browse/{issue_key}"
+            result.append(
+                JiraAssignedIssue(
+                    issue_key=issue_key,
+                    summary=summary,
+                    status=status,
+                    issue_type=issue_type,
+                    issue_url=issue_url,
+                )
+            )
 
         return result
