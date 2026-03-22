@@ -200,3 +200,32 @@ class JiraLiveStatsResponse(BaseModel):
     tasks_by_status: dict[str, int]
     tasks_by_priority: dict[str, int]
     top_assignees: list[JiraAssigneeStats]
+
+
+class JiraDeveloperStats(JiraUser):
+    """Real-time task statistics for a specific Jira user."""
+
+    todo_tickets: int = Field(
+        default=0, description="Number of tickets in 'To Do' status"
+    )
+    inprogress_tickets: int = Field(
+        default=0, description="Number of tickets in 'In Progress' status"
+    )
+    pr_review_tickets: int = Field(
+        default=0, description="Number of tickets in 'PR Review' status"
+    )
+    done_tickets: int = Field(
+        default=0, description="Number of tickets in 'Done' status"
+    )
+    solved_tickets: int = Field(
+        default=0, description="Number of tickets with 'Done' status category"
+    )
+    active_tickets: int = Field(
+        default=0, description="Number of tickets not in 'Done' status category"
+    )
+    total_tickets: int = Field(
+        default=0, description="Total number of tickets assigned"
+    )
+    bugs_reported: int = Field(
+        default=0, description="Number of tickets with type 'Bug' reported by this user"
+    )

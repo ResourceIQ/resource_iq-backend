@@ -4,11 +4,8 @@ All external I/O (database, HTTP, Jira SDK) is mocked so these tests
 run without any network or database access.
 """
 
-import hashlib
-import hmac
 import time
-from datetime import datetime, timedelta
-from types import SimpleNamespace
+from datetime import datetime
 from typing import Any
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -26,6 +23,7 @@ from app.api.integrations.Jira.jira_service import JiraIntegrationService
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def mock_db() -> MagicMock:
@@ -51,6 +49,7 @@ def service(mock_db: MagicMock) -> JiraIntegrationService:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_issue_content(**overrides: Any) -> JiraIssueContent:
     defaults: dict[str, Any] = {
@@ -146,6 +145,7 @@ def _make_mock_jira_issue(
 # 1. Static / pure methods
 # ===================================================================
 
+
 class TestDetectTerminalStatuses:
     def test_finds_standard_terminal_statuses(self) -> None:
         statuses = ["Open", "In Progress", "Done", "Closed"]
@@ -193,6 +193,7 @@ class TestMatchesSelectedStatus:
 # 2. Context generation
 # ===================================================================
 
+
 class TestGenerateIssueContext:
     def test_basic_context(self, service: JiraIntegrationService) -> None:
         issue = _make_issue_content()
@@ -205,7 +206,9 @@ class TestGenerateIssueContext:
         assert "LABELS: backend, auth" in ctx
         assert "DESCRIPTION: Users cannot login" in ctx
 
-    def test_context_without_optional_fields(self, service: JiraIntegrationService) -> None:
+    def test_context_without_optional_fields(
+        self, service: JiraIntegrationService
+    ) -> None:
         issue = _make_issue_content(
             priority=None, labels=[], description=None, comments=[]
         )
@@ -230,7 +233,9 @@ class TestGenerateIssueContext:
         assert "KEY_COMMENTS" in ctx
         assert "This is a comment" in ctx
 
-    def test_description_jira_markup_cleaned(self, service: JiraIntegrationService) -> None:
+    def test_description_jira_markup_cleaned(
+        self, service: JiraIntegrationService
+    ) -> None:
         issue = _make_issue_content(
             description="{code}print('hello'){code} [~user123] some text"
         )
@@ -243,6 +248,7 @@ class TestGenerateIssueContext:
 # ===================================================================
 # 3. HMAC state generation / verification
 # ===================================================================
+
 
 class TestStateTokens:
     @patch("app.api.integrations.Jira.jira_service.settings")
@@ -266,7 +272,10 @@ class TestStateTokens:
         state = service._generate_state(ttl_seconds=60)
 
         # Fast-forward time by 120s so the token is expired
-        with patch("app.api.integrations.Jira.jira_service.time.time", return_value=time.time() + 120):
+        with patch(
+            "app.api.integrations.Jira.jira_service.time.time",
+            return_value=time.time() + 120,
+        ):
             assert service._verify_state(state) is False
 
     @patch("app.api.integrations.Jira.jira_service.settings")
@@ -288,6 +297,7 @@ class TestStateTokens:
 # ===================================================================
 # 4. OAuth flow
 # ===================================================================
+
 
 class TestBuildAuthorizationUrl:
     @patch("app.api.integrations.Jira.jira_service.settings")
@@ -429,6 +439,7 @@ class TestExchangeCodeForToken:
 # 5. Jira client initialization
 # ===================================================================
 
+
 class TestGetJiraClient:
     def test_returns_cached_client(self, service: JiraIntegrationService) -> None:
         mock_client = MagicMock()
@@ -506,6 +517,7 @@ class TestGetJiraClient:
 # 6. Issue parsing
 # ===================================================================
 
+
 class TestParseJiraUser:
     def test_parse_valid_user(self, service: JiraIntegrationService) -> None:
         user_data = MagicMock()
@@ -527,8 +539,15 @@ class TestParseJiraUser:
 
 
 class TestParseIssue:
-    @patch.object(JiraIntegrationService, "jira_url", new_callable=PropertyMock, return_value="https://jira.example.com")
-    def test_parse_basic_issue(self, _mock_url: MagicMock, service: JiraIntegrationService) -> None:
+    @patch.object(
+        JiraIntegrationService,
+        "jira_url",
+        new_callable=PropertyMock,
+        return_value="https://jira.example.com",
+    )
+    def test_parse_basic_issue(
+        self, _mock_url: MagicMock, service: JiraIntegrationService
+    ) -> None:
         mock_issue = _make_mock_jira_issue(
             key="TEST-42",
             summary="Test issue",
@@ -547,14 +566,28 @@ class TestParseIssue:
         assert result.assignee.account_id == "user-1"
         assert result.context is not None
 
-    @patch.object(JiraIntegrationService, "jira_url", new_callable=PropertyMock, return_value="https://jira.example.com")
-    def test_parse_issue_without_assignee(self, _mock_url: MagicMock, service: JiraIntegrationService) -> None:
+    @patch.object(
+        JiraIntegrationService,
+        "jira_url",
+        new_callable=PropertyMock,
+        return_value="https://jira.example.com",
+    )
+    def test_parse_issue_without_assignee(
+        self, _mock_url: MagicMock, service: JiraIntegrationService
+    ) -> None:
         mock_issue = _make_mock_jira_issue(assignee=None)
         result = service._parse_issue(mock_issue)
         assert result.assignee is None
 
-    @patch.object(JiraIntegrationService, "jira_url", new_callable=PropertyMock, return_value="https://jira.example.com")
-    def test_parse_issue_extracts_project_key(self, _mock_url: MagicMock, service: JiraIntegrationService) -> None:
+    @patch.object(
+        JiraIntegrationService,
+        "jira_url",
+        new_callable=PropertyMock,
+        return_value="https://jira.example.com",
+    )
+    def test_parse_issue_extracts_project_key(
+        self, _mock_url: MagicMock, service: JiraIntegrationService
+    ) -> None:
         mock_issue = _make_mock_jira_issue(key="MYPROJ-99")
         result = service._parse_issue(mock_issue)
         assert result.project_key == "MYPROJ"
@@ -563,6 +596,7 @@ class TestParseIssue:
 # ===================================================================
 # 7. API methods (mocked HTTP)
 # ===================================================================
+
 
 class TestGetAllProjects:
     @patch("app.api.integrations.Jira.jira_service.httpx")
@@ -776,9 +810,15 @@ class TestFetchIssues:
 # 8. Get single issue
 # ===================================================================
 
+
 class TestGetIssue:
     @patch("app.api.integrations.Jira.jira_service.httpx.get")
-    @patch.object(JiraIntegrationService, "jira_url", new_callable=PropertyMock, return_value="https://jira.example.com")
+    @patch.object(
+        JiraIntegrationService,
+        "jira_url",
+        new_callable=PropertyMock,
+        return_value="https://jira.example.com",
+    )
     @patch.object(JiraIntegrationService, "get_jira_client")
     def test_returns_issue_detail(
         self,
@@ -838,9 +878,15 @@ class TestGetIssue:
 # 9. Create issue
 # ===================================================================
 
+
 class TestCreateIssue:
     @patch("app.api.integrations.Jira.jira_service.httpx.post")
-    @patch.object(JiraIntegrationService, "jira_url", new_callable=PropertyMock, return_value="https://jira.example.com")
+    @patch.object(
+        JiraIntegrationService,
+        "jira_url",
+        new_callable=PropertyMock,
+        return_value="https://jira.example.com",
+    )
     @patch.object(JiraIntegrationService, "get_jira_client")
     def test_create_issue_without_assignee(
         self,
@@ -873,7 +919,12 @@ class TestCreateIssue:
         assert result.assigned_to is None
 
     @patch("app.api.integrations.Jira.jira_service.httpx.post")
-    @patch.object(JiraIntegrationService, "jira_url", new_callable=PropertyMock, return_value="https://jira.example.com")
+    @patch.object(
+        JiraIntegrationService,
+        "jira_url",
+        new_callable=PropertyMock,
+        return_value="https://jira.example.com",
+    )
     @patch.object(JiraIntegrationService, "get_jira_client")
     def test_create_issue_http_failure(
         self,
@@ -892,9 +943,7 @@ class TestCreateIssue:
         resp.text = "Bad request"
         mock_httpx_post.return_value = resp
 
-        request = JiraCreateIssueRequest(
-            project_key="PROJ", summary="Bad issue"
-        )
+        request = JiraCreateIssueRequest(project_key="PROJ", summary="Bad issue")
 
         with pytest.raises(ValueError, match="Failed to create issue"):
             service.create_issue(request)
@@ -903,6 +952,7 @@ class TestCreateIssue:
 # ===================================================================
 # 10. Assign issue
 # ===================================================================
+
 
 class TestAssignIssue:
     @patch("app.api.integrations.Jira.jira_service.httpx")
@@ -955,6 +1005,7 @@ class TestAssignIssue:
 # ===================================================================
 # 11. Webhook processing
 # ===================================================================
+
 
 class TestProcessWebhookEvent:
     @patch.object(JiraIntegrationService, "_parse_issue")
@@ -1016,6 +1067,7 @@ class TestProcessWebhookEvent:
 # ===================================================================
 # 12. Sync issues
 # ===================================================================
+
 
 class TestSyncIssues:
     @patch.object(JiraIntegrationService, "_update_resource_profiles_from_vectors")
@@ -1112,9 +1164,7 @@ class TestSyncIssues:
         mock_db: MagicMock,
     ) -> None:
         mock_status_map.return_value = {}
-        mock_get_projects.return_value = [
-            {"key": "PROJ1"}, {"key": "PROJ2"}
-        ]
+        mock_get_projects.return_value = [{"key": "PROJ1"}, {"key": "PROJ2"}]
         mock_fetch.return_value = []
 
         result = service.sync_issues(project_keys=None, generate_embeddings=False)
@@ -1126,6 +1176,7 @@ class TestSyncIssues:
 # ===================================================================
 # 13. Jira URL property
 # ===================================================================
+
 
 class TestJiraUrlProperty:
     @patch("app.api.integrations.Jira.jira_service.settings")
@@ -1166,6 +1217,7 @@ class TestJiraUrlProperty:
 # ===================================================================
 # 14. Token refresh
 # ===================================================================
+
 
 class TestRefreshAccessToken:
     @patch.object(JiraIntegrationService, "_store_token")
@@ -1244,6 +1296,7 @@ class TestRefreshAccessToken:
 # 15. Update issue type selected statuses
 # ===================================================================
 
+
 class TestUpdateIssueTypeSelectedStatuses:
     def test_updates_successfully(
         self, service: JiraIntegrationService, mock_db: MagicMock
@@ -1256,9 +1309,7 @@ class TestUpdateIssueTypeSelectedStatuses:
         row.selected_statuses = ["Done"]
         mock_db.query.return_value.filter.return_value.first.return_value = row
 
-        result = service.update_issue_type_selected_statuses(
-            "10001", ["Open", "Done"]
-        )
+        result = service.update_issue_type_selected_statuses("10001", ["Open", "Done"])
 
         assert result.issue_type_name == "Bug"
         mock_db.commit.assert_called()
@@ -1283,6 +1334,80 @@ class TestUpdateIssueTypeSelectedStatuses:
         mock_db.query.return_value.filter.return_value.first.return_value = row
 
         with pytest.raises(ValueError, match="Invalid statuses"):
-            service.update_issue_type_selected_statuses(
-                "10001", ["NonExistent"]
-            )
+            service.update_issue_type_selected_statuses("10001", ["NonExistent"])
+
+
+# ===================================================================
+# 11. Developer Stats
+# ===================================================================
+
+
+class TestGetDeveloperStats:
+    @patch.object(JiraIntegrationService, "get_jira_client")
+    @patch.object(JiraIntegrationService, "_parse_jira_user")
+    def test_get_developer_stats_success(
+        self,
+        mock_parse_user: MagicMock,
+        mock_get_client: MagicMock,
+        service: JiraIntegrationService,
+    ) -> None:
+        # Mock Jira client and user
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        mock_user = JiraUser(
+            account_id="user-123",
+            display_name="Alice",
+            email_address="alice@example.com",
+            active=True,
+        )
+        mock_parse_user.return_value = mock_user
+
+        # Mock issues return
+        issue_done = MagicMock()
+        issue_done.fields.status.statusCategory = MagicMock(key="done")
+        issue_done.fields.status.name = "Done"
+
+        issue_active = MagicMock()
+        issue_active.fields.status.statusCategory = MagicMock(key="indeterminate")
+        issue_active.fields.status.name = "In Progress"
+
+        issue_todo = MagicMock()
+        issue_todo.fields.status.statusCategory = MagicMock(key="new")
+        issue_todo.fields.status.name = "To Do"
+
+        issue_pr = MagicMock()
+        issue_pr.fields.status.statusCategory = MagicMock(key="indeterminate")
+        issue_pr.fields.status.name = "PR Review"
+
+        issue_fallback = MagicMock()
+        issue_fallback.fields.status.statusCategory = None
+        issue_fallback.fields.status.name = "Done"
+
+        mock_client.search_issues.side_effect = [
+            [
+                issue_done,
+                issue_active,
+                issue_todo,
+                issue_pr,
+                issue_fallback,
+            ],  # First call: assigned
+            [MagicMock(), MagicMock()],  # Second call: reported bugs
+        ]
+
+        result = service.get_developer_stats("user-123")
+
+        assert result.account_id == "user-123"
+        assert result.solved_tickets == 2  # issue_done and issue_fallback
+        assert result.active_tickets == 3
+        assert result.todo_tickets == 1
+        assert result.inprogress_tickets == 1
+        assert result.pr_review_tickets == 1
+        assert result.done_tickets == 2
+        assert result.total_tickets == 5
+        assert result.bugs_reported == 2
+
+        assert mock_client.search_issues.call_count == 2
+        calls = mock_client.search_issues.call_args_list
+        assert 'assignee = "user-123"' in calls[0][0][0]
+        assert "issuetype = Bug" in calls[1][0][0]
