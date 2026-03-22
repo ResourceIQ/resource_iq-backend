@@ -953,7 +953,7 @@ class JiraIntegrationService:
         # Search for issues to aggregate counts:
         # 1. Issues assigned to the user
         assigned_issues = client.search_issues(jql, maxResults=1000, fields=["status"])
-        
+
         # 2. Issues reported by the user (bugs)
         bugs_query = f'reporter = "{account_id}" AND issuetype = Bug'
         reported_bugs = client.search_issues(bugs_query, maxResults=1000, fields=["id"])
@@ -967,13 +967,16 @@ class JiraIntegrationService:
 
         for issue in assigned_issues:
             status_name = issue.fields.status.name.lower()
-            
+
             # Mapping status names to specific buckets
             if any(s in status_name for s in ["to do", "backlog", "open"]):
                 todo_count += 1
             elif "in progress" in status_name:
                 inprogress_count += 1
-            elif any(s in status_name for s in ["pr review", "in review", "review", "testing", "qa"]):
+            elif any(
+                s in status_name
+                for s in ["pr review", "in review", "review", "testing", "qa"]
+            ):
                 pr_review_count += 1
             elif any(s in status_name for s in ["done", "closed", "resolved"]):
                 done_count += 1
