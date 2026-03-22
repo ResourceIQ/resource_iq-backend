@@ -1316,19 +1316,19 @@ class TestGetDeveloperStats:
 
         # Mock issues return
         issue_done = MagicMock()
-        issue_done.fields.status.statusCategory = {"key": "done"}
+        issue_done.fields.status.statusCategory = MagicMock(key="done")
         issue_done.fields.status.name = "Done"
         
         issue_active = MagicMock()
-        issue_active.fields.status.statusCategory = {"key": "indeterminate"}
+        issue_active.fields.status.statusCategory = MagicMock(key="indeterminate")
         issue_active.fields.status.name = "In Progress"
 
         issue_todo = MagicMock()
-        issue_todo.fields.status.statusCategory = {"key": "new"}
+        issue_todo.fields.status.statusCategory = MagicMock(key="new")
         issue_todo.fields.status.name = "To Do"
 
         issue_pr = MagicMock()
-        issue_pr.fields.status.statusCategory = {"key": "indeterminate"}
+        issue_pr.fields.status.statusCategory = MagicMock(key="indeterminate")
         issue_pr.fields.status.name = "PR Review"
         
         issue_fallback = MagicMock()

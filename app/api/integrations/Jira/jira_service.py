@@ -982,7 +982,7 @@ class JiraIntegrationService:
             # jira-python Issue objects have status.statusCategory
             status_category = getattr(issue.fields.status, "statusCategory", None)
             if status_category:
-                category_key = status_category.get("key")
+                category_key = getattr(status_category, "key", None)
                 if category_key == "done":
                     solved_count += 1
                 else:
