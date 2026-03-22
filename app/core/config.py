@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     BACKEND_CORS_ORIGINS: Annotated[
         list[AnyUrl] | str, BeforeValidator(parse_cors)
-    ] = []
+    ] = ["https://resource-iq-frontend.vercel.app"]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
