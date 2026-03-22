@@ -1,0 +1,2 @@
+﻿app\api\profiles\profile_route.py:138: error: Argument 1 to "selectinload" has incompatible type "JobPosition | None"; expected "Literal['*'] | QueryableAttribute[Any]"  [arg-type]
+Found 1 error in 1 file (checked 76 source files)

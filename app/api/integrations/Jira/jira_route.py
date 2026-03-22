@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 
 from app.api.integrations.Jira.jira_model import JiraOAuthToken
 from app.api.integrations.Jira.jira_schema import (
+    JiraAssignedIssue,
     JiraAssignIssueRequest,
     JiraAssignIssueResponse,
     JiraAuthConnectResponse,
@@ -393,4 +394,32 @@ async def get_developer_stats(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch Jira developer stats: {str(e)}"
+        )
+
+
+@router.get(
+    "/developers/{account_id}/issues",
+    response_model=list[JiraAssignedIssue],
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
+)
+async def get_developer_issues(
+    session: SessionDep,
+    account_id: str,
+    max_results: int = Query(default=50, ge=1, le=200),
+    include_done: bool = Query(
+        default=False, description="Include completed/done issues"
+    ),
+) -> list[JiraAssignedIssue]:
+    try:
+        jira_service = JiraIntegrationService(session)
+        return jira_service.get_developer_issues(
+            account_id=account_id,
+            max_results=max_results,
+            include_done=include_done,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch developer issues: {str(e)}"
         )
