@@ -85,7 +85,7 @@ services:
       - "6379"
 
   cloud-sql-proxy:
-    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.2
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.21.2
     ports:
       - "5432:5432"
     command:
