@@ -1479,7 +1479,7 @@ class JiraIntegrationService:
                 node_type = node.get("type")
                 
                 if node_type == "text":
-                    return node.get("text", "")
+                    return str(node.get("text", ""))
                     
                 if node_type == "paragraph":
                     text = "".join(extract_text(child, list_context) for child in node.get("content", []))
