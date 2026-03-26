@@ -1470,7 +1470,10 @@ class JiraIntegrationService:
         description_field = fields.get("description")
         plain_description: str | None = None
         if description_field and isinstance(description_field, dict):
-            def extract_text(node: dict[str, Any], list_context: list[list[Any]] | None = None) -> str:
+
+            def extract_text(
+                node: dict[str, Any], list_context: list[list[Any]] | None = None
+            ) -> str:
                 if list_context is None:
                     list_context = []
                 if not isinstance(node, dict):
@@ -1482,7 +1485,10 @@ class JiraIntegrationService:
                     return str(node.get("text", ""))
 
                 if node_type == "paragraph":
-                    text = "".join(extract_text(child, list_context) for child in node.get("content", []))
+                    text = "".join(
+                        extract_text(child, list_context)
+                        for child in node.get("content", [])
+                    )
                     return text + "\n\n"
 
                 if node_type in ("bulletList", "orderedList"):
@@ -1507,12 +1513,18 @@ class JiraIntegrationService:
                         indent = ""
                         prefix = "• "
 
-                    content_text = "".join(extract_text(child, list_context) for child in node.get("content", []))
+                    content_text = "".join(
+                        extract_text(child, list_context)
+                        for child in node.get("content", [])
+                    )
                     content_text = content_text.strip()
                     return f"{indent}{prefix}{content_text}\n"
 
                 if "content" in node:
-                    return "".join(extract_text(child, list_context) for child in node.get("content", []))
+                    return "".join(
+                        extract_text(child, list_context)
+                        for child in node.get("content", [])
+                    )
 
                 return ""
 
