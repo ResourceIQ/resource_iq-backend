@@ -1475,16 +1475,16 @@ class JiraIntegrationService:
                     list_context = []
                 if not isinstance(node, dict):
                     return ""
-                
+
                 node_type = node.get("type")
-                
+
                 if node_type == "text":
                     return str(node.get("text", ""))
-                    
+
                 if node_type == "paragraph":
                     text = "".join(extract_text(child, list_context) for child in node.get("content", []))
                     return text + "\n\n"
-                    
+
                 if node_type in ("bulletList", "orderedList"):
                     new_context = list(list_context)
                     new_context.append([node_type, 0])
@@ -1495,7 +1495,7 @@ class JiraIntegrationService:
                     if not list_context:
                         result += "\n"
                     return result
-                    
+
                 if node_type == "listItem":
                     if list_context:
                         parent_type = list_context[-1][0]
@@ -1506,14 +1506,14 @@ class JiraIntegrationService:
                     else:
                         indent = ""
                         prefix = "• "
-                        
+
                     content_text = "".join(extract_text(child, list_context) for child in node.get("content", []))
                     content_text = content_text.strip()
                     return f"{indent}{prefix}{content_text}\n"
 
                 if "content" in node:
                     return "".join(extract_text(child, list_context) for child in node.get("content", []))
-                    
+
                 return ""
 
             extracted = extract_text(description_field)
