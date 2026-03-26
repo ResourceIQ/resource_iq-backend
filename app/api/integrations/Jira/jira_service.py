@@ -1470,12 +1470,66 @@ class JiraIntegrationService:
         description_field = fields.get("description")
         plain_description: str | None = None
         if description_field and isinstance(description_field, dict):
-            paragraphs: list[str] = []
-            for block in description_field.get("content", []):
-                for inline in block.get("content", []):
-                    if inline.get("type") == "text":
-                        paragraphs.append(inline.get("text", ""))
-            plain_description = " ".join(paragraphs) if paragraphs else None
+
+            def extract_text(
+                node: dict[str, Any], list_context: list[list[Any]] | None = None
+            ) -> str:
+                if list_context is None:
+                    list_context = []
+                if not isinstance(node, dict):
+                    return ""
+
+                node_type = node.get("type")
+
+                if node_type == "text":
+                    return str(node.get("text", ""))
+
+                if node_type == "paragraph":
+                    text = "".join(
+                        extract_text(child, list_context)
+                        for child in node.get("content", [])
+                    )
+                    return text + "\n\n"
+
+                if node_type in ("bulletList", "orderedList"):
+                    new_context = list(list_context)
+                    new_context.append([node_type, 0])
+                    items = []
+                    for child in node.get("content", []):
+                        items.append(extract_text(child, new_context))
+                    result = "".join(items)
+                    if not list_context:
+                        result += "\n"
+                    return result
+
+                if node_type == "listItem":
+                    if list_context:
+                        parent_type = list_context[-1][0]
+                        list_context[-1][1] += 1
+                        idx = list_context[-1][1]
+                        indent = "  " * (len(list_context) - 1)
+                        prefix = f"{idx}. " if parent_type == "orderedList" else "• "
+                    else:
+                        indent = ""
+                        prefix = "• "
+
+                    content_text = "".join(
+                        extract_text(child, list_context)
+                        for child in node.get("content", [])
+                    )
+                    content_text = content_text.strip()
+                    return f"{indent}{prefix}{content_text}\n"
+
+                if "content" in node:
+                    return "".join(
+                        extract_text(child, list_context)
+                        for child in node.get("content", [])
+                    )
+
+                return ""
+
+            extracted = extract_text(description_field)
+            plain_description = extracted.strip() if extracted else None
         elif isinstance(description_field, str):
             plain_description = description_field
 
