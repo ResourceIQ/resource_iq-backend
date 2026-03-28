@@ -2,7 +2,8 @@ import logging
 from typing import Any, cast
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
+from pydantic import BaseModel
 from sqlmodel import Session
 
 from app.api.knowledge_graph.kg_build_service import KGBuildService
@@ -31,6 +32,45 @@ from app.db.session import engine
 from app.utils.deps import CurrentUser, RoleChecker, SessionDep
 
 router = APIRouter(prefix="/kg", tags=["knowledge_graph"])
+
+
+# Request/response model for entity extraction
+class KGExtractEntitiesRequest(BaseModel):
+    title: str
+    description: str = ""
+
+
+class KGExtractEntitiesResponse(BaseModel):
+    languages: list[str] = []
+    frameworks: list[str] = []
+    domains: list[str] = []
+    skills: list[str] = []
+    tools: list[str] = []
+
+
+@router.post("/extract-entities", response_model=KGExtractEntitiesResponse)
+async def extract_entities(
+    request: KGExtractEntitiesRequest = Body(...),
+) -> KGExtractEntitiesResponse:
+    """
+    Extract entities (skills, domains, tools, languages, frameworks) from a task title/description using LLMEntityExtractor.
+    """
+    extractor = LLMEntityExtractor()
+    entities = extractor.extract(
+        files=[],
+        commit_messages=[],
+        title=request.title,
+        body=request.description,
+        labels=[],
+    )
+    return KGExtractEntitiesResponse(
+        languages=entities.languages,
+        frameworks=entities.frameworks,
+        domains=entities.domains,
+        skills=entities.skills,
+        tools=entities.tools,
+    )
+
 
 logger = logging.getLogger(__name__)
 

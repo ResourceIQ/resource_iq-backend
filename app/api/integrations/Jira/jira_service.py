@@ -1151,6 +1151,10 @@ class JiraIntegrationService:
         all_issue_contents: list[JiraIssueContent] = []
         embedding_eligible: list[JiraIssueContent] = []
 
+        MIN_DESCRIPTION_LENGTH = (
+            30  # Minimum length for a Jira issue description to be embedded
+        )
+
         for project_key in project_keys:
             try:
                 logger.info(f"Syncing Jira project: {project_key}")
@@ -1167,8 +1171,18 @@ class JiraIntegrationService:
                         )
                         all_issue_contents.append(issue_content)
 
-                        if self._matches_selected_status(issue_content, status_map):
+                        # Only embed issues with sufficient description length
+                        description = issue_content.description or ""
+                        if (
+                            self._matches_selected_status(issue_content, status_map)
+                            and description
+                            and len(description.strip()) >= MIN_DESCRIPTION_LENGTH
+                        ):
                             embedding_eligible.append(issue_content)
+                        elif self._matches_selected_status(issue_content, status_map):
+                            logger.info(
+                                f"Skipping embedding for Jira issue {issue_content.issue_key}: description too short or missing."
+                            )
                     except Exception as e:
                         error_msg = f"Error processing issue {issue.key}: {str(e)}"
                         logger.error(error_msg)
