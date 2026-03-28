@@ -499,3 +499,76 @@ class TestGetBestFits:
         assert len(result) == 1
         assert result[0].live_jira_workload == 0
         assert result[0].availability_score == 0.0
+
+    @patch.object(ScoreService, "_calculate_developer_github_score")
+    @patch("app.api.score.score_service.VectorEmbeddingService")
+    @patch("app.api.score.score_service.KnowledgeGraphService")
+    def test_wants_to_learn_bonus_added_to_kg_score(
+        self,
+        mock_kg_cls: MagicMock,
+        mock_embed_cls: MagicMock,
+        mock_calc_score: MagicMock,
+        service: ScoreService,
+        mock_db: MagicMock,
+    ) -> None:
+        """Wants-to-learn matches contribute a flat bonus per matched item."""
+        from app.api.knowledge_graph.kg_schema import (
+            KGExperienceProfileResponse,
+            KGLearningIntentProfileResponse,
+        )
+
+        profiles = [_make_profile(github_id=1, total_workload=0)]
+        mock_db.query.return_value.all.return_value = profiles
+
+        mock_embed = MagicMock()
+        mock_embed.generate_embeddings.return_value = [[0.1]]
+        mock_embed_cls.return_value = mock_embed
+        mock_db.execute.return_value.scalar.return_value = "Dev"
+        mock_calc_score.return_value = (0.0, [])
+
+        # Fake KG service: no experience, but one wants-to-learn skill match
+        mock_kg = MagicMock()
+        mock_kg.get_resource_expertise_summary.return_value = MagicMock(
+            pr_count=0,
+            languages={},
+            frameworks={},
+            domains={},
+            skills={},
+            tools={},
+        )
+        mock_kg.get_resource_experience.return_value = KGExperienceProfileResponse()
+        mock_kg.get_resource_learning_intent.return_value = (
+            KGLearningIntentProfileResponse(
+                wants_to_learn_skills=["python"],
+                wants_to_learn_languages=[],
+                wants_to_learn_frameworks=[],
+                wants_to_learn_tools=[],
+                wants_to_work_in_domains=[],
+            )
+        )
+        mock_kg_cls.return_value = mock_kg
+        # Inject the real kg_service into the service instance
+        service.kg_service = mock_kg
+
+        with patch.object(
+            service.task_entity_extractor,
+            "extract",
+            return_value=MagicMock(
+                languages=[],
+                frameworks=[],
+                domains=[],
+                skills=["Python"],  # task requires Python
+                tools=[],
+                is_empty=lambda: False,
+            ),
+        ):
+            result = service.get_best_fits(
+                BestFitInput(task_title="Python API", max_results=5)
+            )
+
+        assert len(result) == 1
+        # One skills match at WANTS_TO_LEARN_BONUS=15.0 each
+        assert result[0].knowledge_graph_score == 15.0
+        assert result[0].kg_match_details["wants_to_learn_matches"] == {
+            "skills": ["python"]
+        }
