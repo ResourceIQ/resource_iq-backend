@@ -397,6 +397,10 @@ class ScoreService:
 
         # Bonus weights
         EXPERIENCE_BONUS_BASE = 20.0  # Multiplied by (experience_level / 10)
+        # Flat bonus per technology the developer has expressed intent to learn
+        # that matches a task requirement. Smaller than max experience bonus to
+        # reward motivation without overstating readiness.
+        WANTS_TO_LEARN_BONUS = 15.0
 
         scores: list[ScoreProfile] = []
         for profile in profiles:
@@ -484,6 +488,18 @@ class ScoreService:
                             f"Failed to fetch experience for user {profile.user_id}: {e}"
                         )
 
+                learning_intent = None
+                if self.kg_service is not None and profile.github_id:
+                    try:
+                        learning_intent = self.kg_service.get_resource_learning_intent(
+                            github_id=profile.github_id,
+                            user_id=str(profile.user_id),
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to fetch learning intent for user {profile.user_id}: {e}"
+                        )
+
                 if experience_profile:
                     for category in [
                         "domains",
@@ -493,7 +509,6 @@ class ScoreService:
                         "tools",
                     ]:
                         task_values = set(task_entities_by_category[category])
-                        # Experience matches
                         experience_items = getattr(experience_profile, category, [])
                         matched_exp = []
                         for item in experience_items:
@@ -509,11 +524,27 @@ class ScoreService:
                                 )
                         if matched_exp:
                             match_details["experience_matches"][category] = matched_exp
-                        # Wants to learn matches (placeholder, see below)
-                        # If you have a method to fetch wants_to_learn entities, add here
-                        # For now, this is left empty
 
-                # TODO: If you have a method to fetch wants_to_learn entities, populate match_details["wants_to_learn_matches"]
+                # Wants-to-learn bonus: developer has signalled intent to grow into a
+                # technology the task requires — reward motivation at a flat rate.
+                _LEARNING_INTENT_FIELDS: dict[str, str] = {
+                    "domains": "wants_to_work_in_domains",
+                    "skills": "wants_to_learn_skills",
+                    "languages": "wants_to_learn_languages",
+                    "frameworks": "wants_to_learn_frameworks",
+                    "tools": "wants_to_learn_tools",
+                }
+                if learning_intent:
+                    for category, intent_field in _LEARNING_INTENT_FIELDS.items():
+                        task_values = set(task_entities_by_category[category])
+                        intent_values = [
+                            v.strip().lower()
+                            for v in getattr(learning_intent, intent_field, [])
+                        ]
+                        matched_learn = [v for v in intent_values if v in task_values]
+                        wants_learn_bonus += len(matched_learn) * WANTS_TO_LEARN_BONUS
+                        if matched_learn:
+                            match_details["wants_to_learn_matches"][category] = matched_learn
 
                 score_profile.knowledge_graph_score = (
                     kg_score + wants_learn_bonus + experience_bonus
