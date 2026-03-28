@@ -544,7 +544,9 @@ class ScoreService:
                         matched_learn = [v for v in intent_values if v in task_values]
                         wants_learn_bonus += len(matched_learn) * WANTS_TO_LEARN_BONUS
                         if matched_learn:
-                            match_details["wants_to_learn_matches"][category] = matched_learn
+                            match_details["wants_to_learn_matches"][category] = (
+                                matched_learn
+                            )
 
                 score_profile.knowledge_graph_score = (
                     kg_score + wants_learn_bonus + experience_bonus
