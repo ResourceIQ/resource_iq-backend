@@ -32,7 +32,7 @@ class BestFitInput(SQLModel):
             raise ValueError(f"Invalid {field}: {invalid}. Allowed: {sorted(allowed)}")
         return values
 
-    def __init__(self, **data):
+    def __init__(self, **data: object) -> None:
         super().__init__(**data)
         # Validate all taxonomy fields
         allowed_skills = set(SKILL_SLUGS)
