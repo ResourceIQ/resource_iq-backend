@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class ScoreService:
     # Ignore weak cosine matches that tend to be semantically noisy.
-    MIN_RELEVANT_SIMILARITY = 0.28
+    MIN_RELEVANT_SIMILARITY = 0.30
     # We only need a small, strong set of PRs to estimate fit quality.
     MAX_SCORING_PRS = 8
     # Confidence saturates after this many relevant PRs.
@@ -77,6 +77,22 @@ class ScoreService:
         return normalized
 
     def _extract_task_entities(self, best_fit_input: BestFitInput) -> ExtractedEntities:
+        # If explicit entities are provided, use them; else extract from text
+        if any(
+            [
+                best_fit_input.skills,
+                best_fit_input.domains,
+                best_fit_input.tools,
+                best_fit_input.languages,
+            ]
+        ):
+            return ExtractedEntities(
+                skills=best_fit_input.skills or [],
+                domains=best_fit_input.domains or [],
+                tools=best_fit_input.tools or [],
+                languages=best_fit_input.languages or [],
+                frameworks=best_fit_input.frameworks or [],
+            )
         return self.task_entity_extractor.extract(
             files=[],
             commit_messages=[],
@@ -233,6 +249,11 @@ class ScoreService:
         if not similarities:
             return 0.0, []
         final_score = self._aggregate_similarity_score(similarities)
+        pr_matches = [
+            pr
+            for pr in pr_matches
+            if pr.match_percentage / 100.0 >= self.MIN_RELEVANT_SIMILARITY
+        ]
         pr_matches.sort(key=lambda x: x.match_percentage, reverse=True)
 
         return final_score, pr_matches[:3]
@@ -307,6 +328,11 @@ class ScoreService:
         if not similarities:
             return 0.0, []
         final_score = self._aggregate_similarity_score(similarities)
+        issue_matches = [
+            issue
+            for issue in issue_matches
+            if issue.match_percentage / 100.0 >= self.MIN_RELEVANT_SIMILARITY
+        ]
         issue_matches.sort(key=lambda x: x.match_percentage, reverse=True)
 
         return final_score, issue_matches[:3]
@@ -441,9 +467,10 @@ class ScoreService:
                     github_pr_score, top_prs = self._calculate_developer_github_score(
                         github_id=profile.github_id,
                         task_embedding=task_embedding,
-                        threshold=50,
+                        threshold=30,
                     )
-                    score_profile.github_pr_score = github_pr_score
+                    # Increase GitHub PR score weight
+                    score_profile.github_pr_score = github_pr_score * 1.5
                     score_profile.pr_info = top_prs
 
                 # --- Knowledge Graph score (existing alignment) ---
@@ -559,7 +586,7 @@ class ScoreService:
                     jira_issue_score, top_issues = self._calculate_developer_jira_score(
                         jira_account_id=profile.jira_account_id,
                         task_embedding=task_embedding,
-                        threshold=50,
+                        threshold=30,
                     )
                     score_profile.jira_issue_score = jira_issue_score
                     score_profile.issue_info = top_issues

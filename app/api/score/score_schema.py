@@ -3,11 +3,55 @@ from uuid import UUID
 from pydantic import computed_field
 from sqlmodel import Field, SQLModel
 
+from app.api.knowledge_graph.kg_taxonomy import (
+    DOMAIN_SLUGS,
+    FRAMEWORK_SLUGS,
+    LANGUAGE_SLUGS,
+    SKILL_SLUGS,
+    TOOL_SLUGS,
+)
+
 
 class BestFitInput(SQLModel):
     task_title: str
     task_description: str = ""
     max_results: int = Field(default=5, gt=0, le=100)
+
+    skills: list[str] = Field(default_factory=list, nullable=True)
+    domains: list[str] = Field(default_factory=list, nullable=True)
+    tools: list[str] = Field(default_factory=list, nullable=True)
+    languages: list[str] = Field(default_factory=list, nullable=True)
+    frameworks: list[str] = Field(default_factory=list, nullable=True)
+
+    @staticmethod
+    def _validate_taxonomy(
+        values: list[str], allowed: set[str], field: str
+    ) -> list[str]:
+        invalid = [v for v in values if v not in allowed]
+        if invalid:
+            raise ValueError(f"Invalid {field}: {invalid}. Allowed: {sorted(allowed)}")
+        return values
+
+    def __init__(self, **data: object) -> None:
+        super().__init__(**data)
+        # Validate all taxonomy fields
+        allowed_skills = set(SKILL_SLUGS)
+        allowed_domains = set(DOMAIN_SLUGS)
+        allowed_tools = set(TOOL_SLUGS)
+        allowed_languages = set(LANGUAGE_SLUGS)
+        allowed_frameworks = set(
+            FRAMEWORK_SLUGS
+        )  # Assuming you have a FRAMEWORK_SLUGS list
+        if self.skills:
+            self._validate_taxonomy(self.skills, allowed_skills, "skills")
+        if self.domains:
+            self._validate_taxonomy(self.domains, allowed_domains, "domains")
+        if self.tools:
+            self._validate_taxonomy(self.tools, allowed_tools, "tools")
+        if self.languages:
+            self._validate_taxonomy(self.languages, allowed_languages, "languages")
+        if self.frameworks:
+            self._validate_taxonomy(self.frameworks, allowed_frameworks, "frameworks")
 
 
 class PrScoreInfo(SQLModel):
