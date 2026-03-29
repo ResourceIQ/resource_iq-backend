@@ -849,3 +849,149 @@ class KnowledgeGraphService:
             aggregated_skills=dict(agg_skls),
             aggregated_tools=dict(agg_tls),
         )
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Granular per-item experience operations (add / update-level / delete)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _category_config(category: str) -> tuple[str, str, dict[str, str], str]:
+        """Return (node_label, node_key, allowed_value_map, rel_attr) for the given category."""
+        configs: dict[str, tuple[str, str, dict[str, str], str]] = {
+            "domains": ("Domain", "slug", DOMAIN_VALUE_MAP, "slug"),
+            "skills": ("Skill", "slug", SKILL_VALUE_MAP, "slug"),
+            "languages": ("Language", "name", LANGUAGE_VALUE_MAP, "name"),
+            "frameworks": ("Framework", "name", FRAMEWORK_VALUE_MAP, "name"),
+            "tools": ("Tool", "name", TOOL_VALUE_MAP, "name"),
+        }
+        if category not in configs:
+            raise ValueError(f"Unknown category: {category}")
+        return configs[category]
+
+    def add_experience_item(
+        self,
+        user_id: str,
+        profile_id: int | None,
+        github_id: int | None,
+        github_login: str | None,
+        full_name: str | None,
+        email: str | None,
+        position_name: str | None,
+        category: str,
+        name: str,
+        experience_level: int,
+    ) -> KGExperienceProfileResponse:
+        """Add a single experience item to the given category. Raises ValueError on unknown taxonomy value."""
+        node_label, node_key, allowed_map, _ = self._category_config(category)
+        canonical = allowed_map.get(name.strip().lower())
+        if canonical is None:
+            raise ValueError(f"Unknown taxonomy value: {name!r}")
+
+        # Ensure Resource node exists
+        resource_props = self._build_resource_properties(
+            user_id=user_id,
+            profile_id=profile_id,
+            github_id=github_id,
+            github_login=github_login,
+            full_name=full_name,
+            email=email,
+            position_name=position_name,
+        )
+        resource_node = self._create_or_update_node(Resource, resource_props)
+
+        # Upsert entity node
+        entity_node = self._create_or_update_node(
+            {
+                "Domain": Domain,
+                "Skill": Skill,
+                "Language": Language,
+                "Framework": Framework,
+                "Tool": Tool,
+            }[node_label],
+            {node_key: canonical},
+        )
+
+        # Connect with level — use Cypher MERGE to safely upsert the relationship level
+        rel_map = {
+            "domains": "has_experience_domain",
+            "skills": "has_experience_skill",
+            "languages": "has_experience_language",
+            "frameworks": "has_experience_framework",
+            "tools": "has_experience_tool",
+        }
+        rel_mgr = getattr(resource_node, rel_map[category])
+        if rel_mgr.is_connected(entity_node):
+            # Update level on the existing relationship
+            rel = rel_mgr.relationship(entity_node)
+            rel.level = experience_level
+            rel.save()
+        else:
+            rel_mgr.connect(entity_node, {"level": experience_level})
+
+        return self.get_resource_experience(github_id=github_id, user_id=user_id)
+
+    def update_experience_item_level(
+        self,
+        user_id: str | None,
+        github_id: int | None,
+        category: str,
+        name: str,
+        experience_level: int,
+    ) -> KGExperienceProfileResponse:
+        """Update the experience level of an existing item. Raises ValueError if not found."""
+        node_label, node_key, allowed_map, _ = self._category_config(category)
+        canonical = allowed_map.get(name.strip().lower())
+        if canonical is None:
+            raise ValueError(f"Unknown taxonomy value: {name!r}")
+
+        query = (
+            self._resource_match_prefix()
+            + f"""
+            MATCH (r)-[rel:HAS_EXPERIENCE_WITH]->(node:{node_label} {{{node_key}: $canonical}})
+            SET rel.level = $level
+            RETURN count(rel) AS updated
+            """
+        )
+        rows, _ = db.cypher_query(
+            query,
+            {
+                "user_id": user_id,
+                "github_id": github_id,
+                "canonical": canonical,
+                "level": experience_level,
+            },
+        )
+        if not rows or (rows[0][0] or 0) == 0:
+            raise ValueError(f"{name!r} not found in {category} for this user")
+
+        return self.get_resource_experience(github_id=github_id, user_id=user_id)
+
+    def delete_experience_item(
+        self,
+        user_id: str | None,
+        github_id: int | None,
+        category: str,
+        name: str,
+    ) -> KGExperienceProfileResponse:
+        """Remove a single HAS_EXPERIENCE_WITH edge. Raises ValueError if not found."""
+        node_label, node_key, allowed_map, _ = self._category_config(category)
+        canonical = allowed_map.get(name.strip().lower())
+        if canonical is None:
+            raise ValueError(f"Unknown taxonomy value: {name!r}")
+
+        query = (
+            self._resource_match_prefix()
+            + f"""
+            MATCH (r)-[rel:HAS_EXPERIENCE_WITH]->(node:{node_label} {{{node_key}: $canonical}})
+            DELETE rel
+            RETURN count(rel) AS deleted
+            """
+        )
+        rows, _ = db.cypher_query(
+            query,
+            {"user_id": user_id, "github_id": github_id, "canonical": canonical},
+        )
+        if not rows or (rows[0][0] or 0) == 0:
+            raise ValueError(f"{name!r} not found in {category} for this user")
+
+        return self.get_resource_experience(github_id=github_id, user_id=user_id)
