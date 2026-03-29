@@ -312,9 +312,9 @@ class TestGetBestFits:
         )
 
         assert len(result) == 3
-        assert result[0].github_pr_score == 800.0
-        assert result[1].github_pr_score == 500.0
-        assert result[2].github_pr_score == 300.0
+        assert result[0].github_pr_score == 1200.0
+        assert result[1].github_pr_score == 750.0
+        assert result[2].github_pr_score == 450.0
 
     @patch.object(ScoreService, "_calculate_developer_github_score")
     @patch("app.api.score.score_service.VectorEmbeddingService")
@@ -395,7 +395,7 @@ class TestGetBestFits:
 
         # First profile fails, second succeeds
         assert len(result) == 1
-        assert result[0].github_pr_score == 500.0
+        assert result[0].github_pr_score == 750.0
 
     @patch.object(ScoreService, "_calculate_developer_github_score")
     @patch("app.api.score.score_service.VectorEmbeddingService")
@@ -423,9 +423,9 @@ class TestGetBestFits:
         )
 
         assert len(result) == 1
-        assert result[0].github_pr_score == 750.0
+        assert result[0].github_pr_score == 1125.0
         assert result[0].availability_score == 200.0
-        assert result[0].total_score == 950.0
+        assert result[0].total_score == 1325.0
         assert result[0].pr_info[0].match_percentage == 85.0
 
     @patch.object(ScoreService, "_get_realtime_jira_workload_map")
