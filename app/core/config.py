@@ -4,7 +4,6 @@ import warnings
 from typing import Annotated, Any, Literal, cast
 
 from pydantic import (
-    AnyUrl,
     BeforeValidator,
     EmailStr,
     HttpUrl,
@@ -40,9 +39,9 @@ class Settings(BaseSettings):
     FRONTEND_HOST: str = "http://localhost:5173"
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 
-    BACKEND_CORS_ORIGINS: Annotated[
-        list[AnyUrl] | str, BeforeValidator(parse_cors)
-    ] = ["https://resource-iq-frontend.vercel.app"]
+    BACKEND_CORS_ORIGINS: Annotated[list[str] | str, BeforeValidator(parse_cors)] = [
+        "https://resource-iq-frontend.vercel.app"
+    ]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
