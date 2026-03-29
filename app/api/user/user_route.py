@@ -211,6 +211,7 @@ def register_user_with_profile(
 
     profile = ResourceProfile(
         user_id=user.id,
+        position_id=user_in.position_id,
         github_id=user_in.github_id,
         github_login=user_in.github_login,
         github_display_name=user_in.github_display_name,
