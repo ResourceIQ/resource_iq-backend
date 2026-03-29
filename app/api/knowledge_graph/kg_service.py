@@ -857,21 +857,12 @@ class KnowledgeGraphService:
     @staticmethod
     def _category_config(category: str) -> tuple[str, str, dict[str, str], str]:
         """Return (node_label, node_key, allowed_value_map, rel_attr) for the given category."""
-        from app.api.knowledge_graph.kg_taxonomy import (
-            DOMAIN_SLUGS, FRAMEWORK_SLUGS, LANGUAGE_SLUGS, SKILL_SLUGS, TOOL_SLUGS,
-        )
-        domain_map = {v.lower(): v for v in DOMAIN_SLUGS}
-        skill_map = {v.lower(): v for v in SKILL_SLUGS}
-        lang_map = {v.lower(): v for v in LANGUAGE_SLUGS}
-        fw_map = {v.lower(): v for v in FRAMEWORK_SLUGS}
-        tool_map = {v.lower(): v for v in TOOL_SLUGS}
-
         configs: dict[str, tuple[str, str, dict[str, str], str]] = {
-            "domains": ("Domain", "slug", domain_map, "slug"),
-            "skills": ("Skill", "slug", skill_map, "slug"),
-            "languages": ("Language", "name", lang_map, "name"),
-            "frameworks": ("Framework", "name", fw_map, "name"),
-            "tools": ("Tool", "name", tool_map, "name"),
+            "domains": ("Domain", "slug", DOMAIN_VALUE_MAP, "slug"),
+            "skills": ("Skill", "slug", SKILL_VALUE_MAP, "slug"),
+            "languages": ("Language", "name", LANGUAGE_VALUE_MAP, "name"),
+            "frameworks": ("Framework", "name", FRAMEWORK_VALUE_MAP, "name"),
+            "tools": ("Tool", "name", TOOL_VALUE_MAP, "name"),
         }
         if category not in configs:
             raise ValueError(f"Unknown category: {category}")
