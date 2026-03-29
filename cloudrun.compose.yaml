@@ -71,7 +71,7 @@ services:
       resources:
         limits:
           cpus: '2'
-          memory: 2Gi
+          memory: 2G
     x-google-cloudrun:
       ingress-container: true
       cpu-throttling: false
