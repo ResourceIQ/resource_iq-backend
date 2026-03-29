@@ -66,12 +66,12 @@ services:
       - REDIS_PORT=6379
       - REDIS_DB=${REDIS_DB}
       - TASK_STATUS_TTL_SECONDS=${TASK_STATUS_TTL_SECONDS}
-      - WEB_CONCURRENCY=4
+      - WEB_CONCURRENCY=2
     deploy:
       resources:
         limits:
           cpus: '2'
-          memory: 2G
+          memory: 4G
     x-google-cloudrun:
       ingress-container: true
       cpu-throttling: false
