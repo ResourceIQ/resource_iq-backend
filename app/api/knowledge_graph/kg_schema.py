@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import TypedDict
 
 from pydantic import BaseModel, Field, field_validator
@@ -97,12 +98,32 @@ class KGExperienceItem(BaseModel):
         return normalized
 
 
+class KGExperienceCategory(str, Enum):
+    """Valid categories for experience items."""
+    languages = "languages"
+    frameworks = "frameworks"
+    tools = "tools"
+    skills = "skills"
+    domains = "domains"
+
+
 class KGExperienceUpdateRequest(BaseModel):
     domains: list[KGExperienceItem] | None = None
     skills: list[KGExperienceItem] | None = None
     languages: list[KGExperienceItem] | None = None
     frameworks: list[KGExperienceItem] | None = None
     tools: list[KGExperienceItem] | None = None
+
+
+class KGExperienceItemAddRequest(BaseModel):
+    """Request to add a single item to an experience category."""
+    name: str = Field(min_length=1, max_length=255, description="Taxonomy name of the item")
+    experience_level: int = Field(ge=0, le=10, description="Experience level 0-10", default=5)
+
+
+class KGExperienceItemLevelUpdate(BaseModel):
+    """Request to update the level of a single existing experience item."""
+    experience_level: int = Field(ge=0, le=10, description="New experience level 0-10")
 
 
 class KGExperienceProfileResponse(BaseModel):
