@@ -8,6 +8,9 @@ from sqlmodel import Session
 from app.api.knowledge_graph.kg_build_service import KGBuildService
 from app.api.knowledge_graph.kg_extractor import LLMEntityExtractor
 from app.api.knowledge_graph.kg_schema import (
+    KGExperienceCategory,
+    KGExperienceItemAddRequest,
+    KGExperienceItemLevelUpdate,
     KGExperienceProfileResponse,
     KGExperienceUpdateRequest,
     KGLearningIntentEntities,
@@ -375,6 +378,124 @@ async def update_resource_experience_by_user(
         len(response.tools),
     )
 
+    return response
+
+
+@router.post(
+    "/experience/user/{user_id}/{category}",
+    response_model=KGExperienceProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+    summary="Add a single experience item",
+    description=(
+        "Add one language / framework / tool / skill / domain entry to a user's experience profile.\n\n"
+        "The `name` must be a valid taxonomy value; use `GET /kg/taxonomy` to discover valid names.\n"
+        "If the item already exists, its `experience_level` is updated instead."
+    ),
+)
+async def add_experience_item(
+    session: SessionDep,
+    user_id: UUID,
+    category: KGExperienceCategory,
+    request: KGExperienceItemAddRequest,
+) -> KGExperienceProfileResponse:
+    """**Admin / Moderator only.** Add (or upsert) one experience item."""
+    profile = _get_profile_by_user_id(session, user_id)
+    user = _get_user_by_id(session, user_id)
+    graph_service = KnowledgeGraphService()
+    try:
+        response = graph_service.add_experience_item(
+            user_id=str(profile.user_id),
+            profile_id=profile.id,
+            github_id=profile.github_id,
+            github_login=profile.github_login,
+            full_name=user.full_name,
+            email=user.email,
+            position_name=profile.position.name if profile.position else None,
+            category=category.value,
+            name=request.name,
+            experience_level=request.experience_level,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    logger.info(
+        "Added KG experience item user_id=%s category=%s name=%s level=%d",
+        user_id, category.value, request.name, request.experience_level,
+    )
+    return response
+
+
+@router.patch(
+    "/experience/user/{user_id}/{category}/{item_name}",
+    response_model=KGExperienceProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+    summary="Update experience level of a single item",
+    description=(
+        "Change the `experience_level` (0–10) of one existing experience item.\n\n"
+        "Returns 422 if `item_name` is not a valid taxonomy value or is not yet in the user's profile."
+    ),
+)
+async def update_experience_item_level(
+    session: SessionDep,
+    user_id: UUID,
+    category: KGExperienceCategory,
+    item_name: str,
+    request: KGExperienceItemLevelUpdate,
+) -> KGExperienceProfileResponse:
+    """**Admin / Moderator only.** Update the level of one experience item."""
+    profile = _get_profile_by_user_id(session, user_id)
+    graph_service = KnowledgeGraphService()
+    try:
+        response = graph_service.update_experience_item_level(
+            user_id=str(profile.user_id),
+            github_id=profile.github_id,
+            category=category.value,
+            name=item_name,
+            experience_level=request.experience_level,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    logger.info(
+        "Updated KG experience level user_id=%s category=%s name=%s level=%d",
+        user_id, category.value, item_name, request.experience_level,
+    )
+    return response
+
+
+@router.delete(
+    "/experience/user/{user_id}/{category}/{item_name}",
+    response_model=KGExperienceProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+    summary="Delete a single experience item",
+    description=(
+        "Remove one language / framework / tool / skill / domain from a user's experience profile.\n\n"
+        "Returns 422 if `item_name` is unknown or not in the user's profile."
+    ),
+)
+async def delete_experience_item(
+    session: SessionDep,
+    user_id: UUID,
+    category: KGExperienceCategory,
+    item_name: str,
+) -> KGExperienceProfileResponse:
+    """**Admin / Moderator only.** Remove one experience item."""
+    profile = _get_profile_by_user_id(session, user_id)
+    graph_service = KnowledgeGraphService()
+    try:
+        response = graph_service.delete_experience_item(
+            user_id=str(profile.user_id),
+            github_id=profile.github_id,
+            category=category.value,
+            name=item_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    logger.info(
+        "Deleted KG experience item user_id=%s category=%s name=%s",
+        user_id, category.value, item_name,
+    )
     return response
 
 
