@@ -95,6 +95,7 @@ class UserRegisterWithProfile(SQLModel):
     full_name: str | None = Field(default=None, max_length=255)
     role: Role = Role.USER
     is_active: bool = True
+    position_id: int | None = None
 
     # Optional GitHub mapping
     github_id: int | None = None
