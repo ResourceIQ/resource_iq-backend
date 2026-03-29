@@ -420,7 +420,10 @@ async def add_experience_item(
 
     logger.info(
         "Added KG experience item user_id=%s category=%s name=%s level=%d",
-        user_id, category.value, request.name, request.experience_level,
+        user_id,
+        category.value,
+        request.name,
+        request.experience_level,
     )
     return response
 
@@ -458,7 +461,10 @@ async def update_experience_item_level(
 
     logger.info(
         "Updated KG experience level user_id=%s category=%s name=%s level=%d",
-        user_id, category.value, item_name, request.experience_level,
+        user_id,
+        category.value,
+        item_name,
+        request.experience_level,
     )
     return response
 
@@ -494,7 +500,9 @@ async def delete_experience_item(
 
     logger.info(
         "Deleted KG experience item user_id=%s category=%s name=%s",
-        user_id, category.value, item_name,
+        user_id,
+        category.value,
+        item_name,
     )
     return response
 

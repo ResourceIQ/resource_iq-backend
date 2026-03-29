@@ -100,6 +100,7 @@ class KGExperienceItem(BaseModel):
 
 class KGExperienceCategory(str, Enum):
     """Valid categories for experience items."""
+
     languages = "languages"
     frameworks = "frameworks"
     tools = "tools"
@@ -117,12 +118,18 @@ class KGExperienceUpdateRequest(BaseModel):
 
 class KGExperienceItemAddRequest(BaseModel):
     """Request to add a single item to an experience category."""
-    name: str = Field(min_length=1, max_length=255, description="Taxonomy name of the item")
-    experience_level: int = Field(ge=0, le=10, description="Experience level 0-10", default=5)
+
+    name: str = Field(
+        min_length=1, max_length=255, description="Taxonomy name of the item"
+    )
+    experience_level: int = Field(
+        ge=0, le=10, description="Experience level 0-10", default=5
+    )
 
 
 class KGExperienceItemLevelUpdate(BaseModel):
     """Request to update the level of a single existing experience item."""
+
     experience_level: int = Field(ge=0, le=10, description="New experience level 0-10")
 
 

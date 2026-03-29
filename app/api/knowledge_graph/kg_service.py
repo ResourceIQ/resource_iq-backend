@@ -901,7 +901,13 @@ class KnowledgeGraphService:
 
         # Upsert entity node
         entity_node = self._create_or_update_node(
-            {"Domain": Domain, "Skill": Skill, "Language": Language, "Framework": Framework, "Tool": Tool}[node_label],
+            {
+                "Domain": Domain,
+                "Skill": Skill,
+                "Language": Language,
+                "Framework": Framework,
+                "Tool": Tool,
+            }[node_label],
             {node_key: canonical},
         )
 
@@ -948,7 +954,12 @@ class KnowledgeGraphService:
         )
         rows, _ = db.cypher_query(
             query,
-            {"user_id": user_id, "github_id": github_id, "canonical": canonical, "level": experience_level},
+            {
+                "user_id": user_id,
+                "github_id": github_id,
+                "canonical": canonical,
+                "level": experience_level,
+            },
         )
         if not rows or (rows[0][0] or 0) == 0:
             raise ValueError(f"{name!r} not found in {category} for this user")
@@ -984,4 +995,3 @@ class KnowledgeGraphService:
             raise ValueError(f"{name!r} not found in {category} for this user")
 
         return self.get_resource_experience(github_id=github_id, user_id=user_id)
-
