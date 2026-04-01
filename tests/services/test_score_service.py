@@ -24,7 +24,9 @@ def mock_db() -> MagicMock:
 
 @pytest.fixture()
 def service(mock_db: MagicMock) -> ScoreService:
-    return ScoreService(mock_db)
+    svc = ScoreService(mock_db)
+    svc.kg_service = None
+    return svc
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +51,7 @@ def _make_profile(
     else:
         p.position = None
     p.total_workload = total_workload
+    p.burnout_level = 0.0
     return p
 
 
@@ -126,30 +129,7 @@ class TestAggregateSimilarityScore:
 
 
 # ===================================================================
-# 2. Calculate availability score
-# ===================================================================
-
-
-class TestCalculateAvailabilityScore:
-    def test_returns_max_score_for_zero_workload(self) -> None:
-        score = ScoreService._calculate_availability_score(0)
-        assert score == 200.0
-
-    def test_returns_zero_for_threshold_or_more(self) -> None:
-        score_at_threshold = ScoreService._calculate_availability_score(15)
-        score_above_threshold = ScoreService._calculate_availability_score(22)
-
-        assert score_at_threshold == 0.0
-        assert score_above_threshold == 0.0
-
-    def test_linearly_decreases_with_workload(self) -> None:
-        score = ScoreService._calculate_availability_score(6)
-        # (1 - 6/15) * 200 = 80
-        assert score == 80.0
-
-
-# ===================================================================
-# 3. Calculate developer GitHub score
+# 2. Calculate developer GitHub score
 # ===================================================================
 
 
@@ -424,8 +404,7 @@ class TestGetBestFits:
 
         assert len(result) == 1
         assert result[0].github_pr_score == 1125.0
-        assert result[0].availability_score == 200.0
-        assert result[0].total_score == 1325.0
+        assert result[0].total_score == 1125.0
         assert result[0].pr_info[0].match_percentage == 85.0
 
     @patch.object(ScoreService, "_get_realtime_jira_workload_map")
@@ -462,7 +441,7 @@ class TestGetBestFits:
 
         assert len(result) == 1
         assert result[0].live_jira_workload == 15
-        assert result[0].availability_score == 0.0
+        assert result[0].total_score == 750.0
 
     @patch.object(ScoreService, "_get_realtime_jira_workload_map")
     @patch.object(ScoreService, "_calculate_developer_github_score")
@@ -498,7 +477,7 @@ class TestGetBestFits:
 
         assert len(result) == 1
         assert result[0].live_jira_workload == 0
-        assert result[0].availability_score == 0.0
+        assert result[0].total_score == 750.0
 
     @patch.object(ScoreService, "_calculate_developer_github_score")
     @patch("app.api.score.score_service.VectorEmbeddingService")

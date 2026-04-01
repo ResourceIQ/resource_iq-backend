@@ -26,8 +26,12 @@ from app.api.dashboard.dashboard_schema import (
     TeamUtilizationCard,
     UserWorkload,
 )
+from app.api.embedding.embedding_model import JiraIssueVector
+from app.api.integrations.Jira.jira_service import JiraIntegrationService
+from app.api.knowledge_graph.kg_service import KnowledgeGraphService
 from app.api.profiles.profile_model import ResourceProfile
 from app.api.user.user_model import User
+from app.core.config import settings
 
 
 def get_integration_health(session: Session) -> ConnectedIntegrationsCard:
@@ -112,12 +116,23 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
     profiles = session.exec(select(ResourceProfile)).all()
     total_profiles = len(profiles)
 
-    if total_profiles > 0:
-        utilized = sum(1 for p in profiles if p.total_workload > 0)
-        utilization_pct = round((utilized / total_profiles) * 100, 1)
-    else:
-        utilized = 0
-        utilization_pct = 0.0
+    jira_counts = JiraIntegrationService(session).get_live_assignee_workload_map(
+        [p.jira_account_id for p in profiles if p.jira_account_id]
+    )
+
+    utilized = 0
+    for profile in profiles:
+        jira_workload = (
+            jira_counts.get(profile.jira_account_id, 0)
+            if profile.jira_account_id
+            else 0
+        )
+        if jira_workload > 0:
+            utilized += 1
+
+    utilization_pct = (
+        round((utilized / total_profiles) * 100, 1) if total_profiles > 0 else 0.0
+    )
 
     if utilization_pct > 80:
         util_msg = "High utilization"
@@ -127,8 +142,6 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
         util_msg = "Capacity available"
 
     # ---- 3. Active Tasks (Total synced from Jira) ----
-    from app.api.embedding.embedding_model import JiraIssueVector
-
     total_jira_tasks = session.exec(
         select(func.count()).select_from(JiraIssueVector)
     ).one()
@@ -137,7 +150,7 @@ def get_dashboard_data(session: Session) -> DashboardResponse:
     completed_this_week = 0
 
     # ---- 4. Pending Assignments ----
-    pending = sum(1 for p in profiles if p.total_workload == 0)
+    pending = total_profiles - utilized
 
     # ---- 5. Resource Allocation by Team (grouped by position) ----
     team_map: dict[str, int] = {}
@@ -259,22 +272,25 @@ def get_jira_task_stats(session: Session) -> JiraTaskStatsCard:
 
 
 def get_profile_skills(session: Session) -> ProfileSkillsCard:
-    """Aggregate skills and domains from all resource profiles."""
+    """Aggregate skills and domains from knowledge graph expertise summaries."""
     profiles = session.exec(select(ResourceProfile)).all()
 
     skill_counts: dict[str, int] = {}
     domain_counts: dict[str, int] = {}
 
-    for profile in profiles:
-        for skill in profile.skills_list:
-            skill_clean = skill.strip()
-            if skill_clean:
-                skill_counts[skill_clean] = skill_counts.get(skill_clean, 0) + 1
-
-        for domain in profile.domains_list:
-            domain_clean = domain.strip()
-            if domain_clean:
-                domain_counts[domain_clean] = domain_counts.get(domain_clean, 0) + 1
+    if settings.neo4j_enabled:
+        kg_service = KnowledgeGraphService()
+        for profile in profiles:
+            if not profile.github_id:
+                continue
+            summary = kg_service.get_resource_expertise_summary(
+                user_id=str(profile.user_id),
+                github_id=profile.github_id,
+            )
+            for skill, count in summary.skills.items():
+                skill_counts[skill] = skill_counts.get(skill, 0) + count
+            for domain, count in summary.domains.items():
+                domain_counts[domain] = domain_counts.get(domain, 0) + count
 
     top_skills = [
         SkillCount(name=k, count=v)
@@ -296,27 +312,34 @@ def get_profile_workload(session: Session) -> ProfileWorkloadCard:
     results = session.exec(statement).all()
 
     total_jira = 0
-    total_github = 0
-    overloaded = []
-    idle = []
+    overloaded: list[UserWorkload] = []
+    idle: list[UserWorkload] = []
+
+    jira_counts = JiraIntegrationService(session).get_live_assignee_workload_map(
+        [profile.jira_account_id for profile, _ in results if profile.jira_account_id]
+    )
 
     WORKLOAD_THRESHOLD = 15
 
     for profile, user in results:
-        total_jira += profile.jira_workload
-        total_github += profile.github_workload
+        jira_workload = (
+            jira_counts.get(profile.jira_account_id, 0)
+            if profile.jira_account_id
+            else 0
+        )
+        total_workload = jira_workload
+        total_jira += jira_workload
 
         user_data = UserWorkload(
             user_id=str(user.id),
             name=user.full_name or "Unknown",
-            jira_workload=profile.jira_workload,
-            github_workload=profile.github_workload,
-            total_workload=profile.total_workload,
+            jira_workload=jira_workload,
+            total_workload=total_workload,
         )
 
-        if profile.total_workload >= WORKLOAD_THRESHOLD:
+        if total_workload >= WORKLOAD_THRESHOLD:
             overloaded.append(user_data)
-        elif profile.total_workload == 0:
+        elif total_workload == 0:
             idle.append(user_data)
 
     # Sort the lists
@@ -324,7 +347,7 @@ def get_profile_workload(session: Session) -> ProfileWorkloadCard:
     idle.sort(key=lambda x: x.name or "")
 
     return ProfileWorkloadCard(
-        jira_vs_github_split={"jira": total_jira, "github": total_github},
+        jira_workload_total=total_jira,
         overloaded_members=overloaded,
         idle_members=idle,
     )

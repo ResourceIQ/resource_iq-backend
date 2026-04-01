@@ -13,8 +13,6 @@ class ResourceProfileBase(BaseModel):
     """Base schema for resource profile."""
 
     position_id: int | None = None
-    skills: str | None = None
-    domains: str | None = None
 
 
 class ResourceProfileCreate(ResourceProfileBase):
@@ -72,15 +70,7 @@ class ResourceProfileResponse(BaseModel):
     github_connected_at: datetime | None = None
     has_github: bool = False
 
-    # Skills & Domains
-    skills: list[str] = Field(default_factory=list)
-    domains: list[str] = Field(default_factory=list)
-
-    # Workload
-    jira_workload: int = 0
-    github_workload: int = 0
-    total_workload: int = 0
-    workload_updated_at: datetime | None = None
+    burnout_level: float = 0.0
 
     # Timestamps
     created_at: datetime | None = None
@@ -93,17 +83,36 @@ class ProfileWorkload(BaseModel):
     user_id: uuid.UUID
     display_name: str | None = None
     jira_workload: int = 0
-    github_workload: int = 0
     total_workload: int = 0
     last_updated: datetime | None = None
 
 
 class UpdateSkillsRequest(BaseModel):
-    """Request to update skills/domains."""
+    """Request to update position only."""
 
     position_id: int | None = None
-    skills: list[str] | None = None
-    domains: list[str] | None = None
+
+
+class UpdateProfileRequest(BaseModel):
+    """Request to partially update a profile."""
+
+    burnout_level: float | None = Field(default=None, ge=0.0, le=10.0)
+    position_id: int | None = None
+
+    jira_account_id: str | None = None
+    jira_display_name: str | None = None
+    jira_email: str | None = None
+    jira_avatar_url: str | None = None
+
+    github_id: int | None = None
+    github_login: str | None = None
+    github_display_name: str | None = None
+    github_email: str | None = None
+    github_avatar_url: str | None = None
+
+
+class UpdateMyProfileRequest(UpdateProfileRequest):
+    """Request to partially update the current user's profile."""
 
 
 class ProfileMatchResponse(BaseModel):

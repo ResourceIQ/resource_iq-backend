@@ -83,7 +83,6 @@ class ScoreProfile(SQLModel):
     github_pr_score: float = 0.0
     knowledge_graph_score: float = 0.0
     jira_issue_score: float = 0.0
-    availability_score: float = 0.0
     live_jira_workload: int = 0
     pr_info: list[PrScoreInfo] = Field(default_factory=list)
     kg_matches: list[KGMatchInfo] = Field(default_factory=list)
@@ -93,6 +92,8 @@ class ScoreProfile(SQLModel):
         default_factory=dict
     )  # New: frontend-friendly match details
 
+    burnout_penalty: float = 0.0
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def total_score(self) -> float:
@@ -100,5 +101,5 @@ class ScoreProfile(SQLModel):
             self.github_pr_score
             + self.knowledge_graph_score
             + self.jira_issue_score
-            + self.availability_score
+            - self.burnout_penalty
         )

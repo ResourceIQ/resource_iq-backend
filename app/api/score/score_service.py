@@ -53,10 +53,6 @@ class ScoreService:
         "tools": 2,
         "languages": 3,
     }
-    # Availability score drops linearly as workload increases.
-    # Workloads at or above this threshold are treated as fully busy.
-    AVAILABILITY_WORKLOAD_THRESHOLD = 10
-    AVAILABILITY_MAX_SCORE = 200.0
 
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -352,23 +348,6 @@ class ScoreService:
         )
         return self._score_knowledge_graph_alignment(task_entities, expertise_summary)
 
-    @classmethod
-    def _calculate_availability_score(cls, total_workload: int) -> float:
-        """Convert current workload into an availability score.
-
-        Lower workload means higher availability. Score is clamped to
-        [0, AVAILABILITY_MAX_SCORE] and decreases linearly up to the
-        configured workload threshold.
-        """
-        clamped_workload = max(0, total_workload)
-        if clamped_workload >= cls.AVAILABILITY_WORKLOAD_THRESHOLD:
-            return 0.0
-
-        availability_ratio = 1.0 - (
-            clamped_workload / cls.AVAILABILITY_WORKLOAD_THRESHOLD
-        )
-        return round(availability_ratio * cls.AVAILABILITY_MAX_SCORE, 2)
-
     def _get_realtime_jira_workload_map(
         self, profiles: list[ResourceProfile]
     ) -> dict[str, int]:
@@ -384,7 +363,7 @@ class ScoreService:
             return jira_service.get_live_assignee_workload_map(jira_account_ids)
         except Exception:
             logger.warning(
-                "Falling back to persisted workload for availability scoring.",
+                "Failed to fetch live Jira workload map for scoring.",
                 exc_info=True,
             )
             return {}
@@ -446,20 +425,16 @@ class ScoreService:
                     profile.jira_account_id, 0
                 )
 
-            # Use live Jira workload when available, otherwise fall back to persisted
-            # value to avoid dropping availability scoring when Jira is temporarily down.
-            if (
-                profile.jira_account_id
-                and profile.jira_account_id in live_jira_workload_by_account
-            ):
-                workload_for_availability = live_jira_workload
-            else:
-                workload_for_availability = profile.total_workload
-
+            # Burnout penalty uses live Jira workload only.
+            active_tasks = live_jira_workload
+            burnout_level = getattr(profile, "burnout_level", 0.0) or 0.0
+            burnout_penalty = (
+                burnout_level * active_tasks * 10.0
+            )  # Tunable factor to scale the penalty
+            if burnout_level == 0:
+                burnout_penalty = active_tasks * 100.0
             score_profile.live_jira_workload = live_jira_workload
-            score_profile.availability_score = self._calculate_availability_score(
-                workload_for_availability
-            )
+            score_profile.burnout_penalty = burnout_penalty
 
             try:
                 # --- GitHub PR score ---

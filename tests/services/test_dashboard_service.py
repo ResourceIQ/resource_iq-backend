@@ -9,11 +9,10 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_profile(
     total_workload: int = 0,
@@ -57,9 +56,12 @@ def _make_profile(
 # 1. Integration health
 # ===================================================================
 
+
 class TestGetIntegrationHealth:
     @patch("app.api.dashboard.dashboard_service.select")
-    def test_healthy_when_both_connected_and_valid(self, mock_select: MagicMock) -> None:
+    def test_healthy_when_both_connected_and_valid(
+        self, mock_select: MagicMock
+    ) -> None:
         from app.api.dashboard.dashboard_service import get_integration_health
 
         session = MagicMock()
@@ -156,18 +158,41 @@ class TestGetIntegrationHealth:
 # 2. Profile skills aggregation
 # ===================================================================
 
+
 class TestGetProfileSkills:
-    @patch("app.api.dashboard.dashboard_service.select")
-    def test_aggregates_skills_and_domains(self, mock_select: MagicMock) -> None:
+    @patch("app.api.dashboard.dashboard_service.settings")
+    @patch("app.api.dashboard.dashboard_service.KnowledgeGraphService")
+    def test_aggregates_skills_and_domains(
+        self, mock_kg_cls: MagicMock, mock_settings: MagicMock
+    ) -> None:
         from app.api.dashboard.dashboard_service import get_profile_skills
+
+        mock_settings.neo4j_enabled = True
 
         session = MagicMock()
         profiles = [
-            _make_profile(skills="Python,FastAPI,Docker", domains="Backend,DevOps"),
-            _make_profile(skills="Python,React", domains="Backend,Frontend"),
-            _make_profile(skills="Docker,Kubernetes", domains="DevOps"),
+            _make_profile(github_id=1),
+            _make_profile(github_id=2),
+            _make_profile(github_id=3),
         ]
         session.exec.return_value.all.return_value = profiles
+
+        mock_kg = MagicMock()
+        mock_kg.get_resource_expertise_summary.side_effect = [
+            MagicMock(
+                skills={"Python": 1, "FastAPI": 1, "Docker": 1},
+                domains={"Backend": 1, "DevOps": 1},
+            ),
+            MagicMock(
+                skills={"Python": 1, "React": 1},
+                domains={"Backend": 1, "Frontend": 1},
+            ),
+            MagicMock(
+                skills={"Docker": 1, "Kubernetes": 1},
+                domains={"DevOps": 1},
+            ),
+        ]
+        mock_kg_cls.return_value = mock_kg
 
         result = get_profile_skills(session)
 
@@ -181,9 +206,14 @@ class TestGetProfileSkills:
         domain_names = [d.name for d in result.top_domains]
         assert "Backend" in domain_names
 
-    @patch("app.api.dashboard.dashboard_service.select")
-    def test_handles_empty_profiles(self, mock_select: MagicMock) -> None:
+    @patch("app.api.dashboard.dashboard_service.settings")
+    @patch("app.api.dashboard.dashboard_service.KnowledgeGraphService")
+    def test_handles_empty_profiles(
+        self, mock_kg_cls: MagicMock, mock_settings: MagicMock
+    ) -> None:
         from app.api.dashboard.dashboard_service import get_profile_skills
+
+        mock_settings.neo4j_enabled = True
 
         session = MagicMock()
         session.exec.return_value.all.return_value = []
@@ -193,13 +223,24 @@ class TestGetProfileSkills:
         assert result.top_skills == []
         assert result.top_domains == []
 
-    @patch("app.api.dashboard.dashboard_service.select")
-    def test_handles_profiles_without_skills(self, mock_select: MagicMock) -> None:
+    @patch("app.api.dashboard.dashboard_service.settings")
+    @patch("app.api.dashboard.dashboard_service.KnowledgeGraphService")
+    def test_handles_profiles_without_skills(
+        self, mock_kg_cls: MagicMock, mock_settings: MagicMock
+    ) -> None:
         from app.api.dashboard.dashboard_service import get_profile_skills
 
+        mock_settings.neo4j_enabled = True
+
         session = MagicMock()
-        profiles = [_make_profile(skills=None, domains=None)]
+        profiles = [_make_profile(github_id=1)]
         session.exec.return_value.all.return_value = profiles
+
+        mock_kg = MagicMock()
+        mock_kg.get_resource_expertise_summary.return_value = MagicMock(
+            skills={}, domains={}
+        )
+        mock_kg_cls.return_value = mock_kg
 
         result = get_profile_skills(session)
 
@@ -210,6 +251,7 @@ class TestGetProfileSkills:
 # ===================================================================
 # 3. Profile integrations count
 # ===================================================================
+
 
 class TestGetProfileIntegrations:
     @patch("app.api.dashboard.dashboard_service.select")
@@ -249,9 +291,12 @@ class TestGetProfileIntegrations:
 # 4. Profile workload analysis
 # ===================================================================
 
+
 class TestGetProfileWorkload:
-    @patch("app.api.dashboard.dashboard_service.select")
-    def test_identifies_overloaded_and_idle(self, mock_select: MagicMock) -> None:
+    @patch("app.api.dashboard.dashboard_service.JiraIntegrationService")
+    def test_identifies_overloaded_and_idle(
+        self, mock_jira_service_cls: MagicMock
+    ) -> None:
         from app.api.dashboard.dashboard_service import get_profile_workload
 
         session = MagicMock()
@@ -260,25 +305,19 @@ class TestGetProfileWorkload:
         user_overloaded.id = uuid4()
         user_overloaded.full_name = "Alice Heavy"
         profile_overloaded = MagicMock()
-        profile_overloaded.jira_workload = 10
-        profile_overloaded.github_workload = 8
-        profile_overloaded.total_workload = 18
+        profile_overloaded.jira_account_id = "jira-1"
 
         user_idle = MagicMock()
         user_idle.id = uuid4()
         user_idle.full_name = "Bob Idle"
         profile_idle = MagicMock()
-        profile_idle.jira_workload = 0
-        profile_idle.github_workload = 0
-        profile_idle.total_workload = 0
+        profile_idle.jira_account_id = "jira-2"
 
         user_normal = MagicMock()
         user_normal.id = uuid4()
         user_normal.full_name = "Charlie Normal"
         profile_normal = MagicMock()
-        profile_normal.jira_workload = 5
-        profile_normal.github_workload = 3
-        profile_normal.total_workload = 8
+        profile_normal.jira_account_id = "jira-3"
 
         session.exec.return_value.all.return_value = [
             (profile_overloaded, user_overloaded),
@@ -286,25 +325,36 @@ class TestGetProfileWorkload:
             (profile_normal, user_normal),
         ]
 
+        mock_jira_service = MagicMock()
+        mock_jira_service.get_live_assignee_workload_map.return_value = {
+            "jira-1": 15,
+            "jira-2": 0,
+            "jira-3": 5,
+        }
+        mock_jira_service_cls.return_value = mock_jira_service
+
         result = get_profile_workload(session)
 
-        assert result.jira_vs_github_split["jira"] == 15
-        assert result.jira_vs_github_split["github"] == 11
+        assert result.jira_workload_total == 20
         assert len(result.overloaded_members) == 1
         assert result.overloaded_members[0].name == "Alice Heavy"
         assert len(result.idle_members) == 1
         assert result.idle_members[0].name == "Bob Idle"
 
-    @patch("app.api.dashboard.dashboard_service.select")
-    def test_empty_team(self, mock_select: MagicMock) -> None:
+    @patch("app.api.dashboard.dashboard_service.JiraIntegrationService")
+    def test_empty_team(self, mock_jira_service_cls: MagicMock) -> None:
         from app.api.dashboard.dashboard_service import get_profile_workload
 
         session = MagicMock()
         session.exec.return_value.all.return_value = []
 
+        mock_jira_service = MagicMock()
+        mock_jira_service.get_live_assignee_workload_map.return_value = {}
+        mock_jira_service_cls.return_value = mock_jira_service
+
         result = get_profile_workload(session)
 
-        assert result.jira_vs_github_split == {"jira": 0, "github": 0}
+        assert result.jira_workload_total == 0
         assert result.overloaded_members == []
         assert result.idle_members == []
 
@@ -313,54 +363,67 @@ class TestGetProfileWorkload:
 # 5. Dashboard data aggregation
 # ===================================================================
 
+
 class TestGetDashboardData:
-    def test_aggregates_all_metrics(self) -> None:
+    @patch("app.api.dashboard.dashboard_service.JiraIntegrationService")
+    def test_aggregates_all_metrics(self, mock_jira_service_cls: MagicMock) -> None:
         from app.api.dashboard.dashboard_service import get_dashboard_data
 
         session = MagicMock()
 
         profiles = [
-            _make_profile(total_workload=5, position="Backend"),
-            _make_profile(total_workload=0, position="Frontend"),
-            _make_profile(total_workload=3, position="Backend"),
+            _make_profile(jira_account_id="jira-1", position="Backend"),
+            _make_profile(jira_account_id="jira-2", position="Frontend"),
+            _make_profile(jira_account_id="jira-3", position="Backend"),
         ]
 
         call_count = 0
-        def exec_side_effect(stmt: Any) -> MagicMock:
+
+        def exec_side_effect(_stmt: Any) -> MagicMock:
             nonlocal call_count
             result = MagicMock()
             call_count += 1
             result.one.return_value = {
                 1: 10,  # total_members
-                2: 8,   # developers
-                3: 2,   # admins
-                4: 1,   # new_this_month
+                2: 8,  # developers
+                3: 2,  # admins
+                4: 1,  # new_this_month
             }.get(call_count, 5)
             result.all.return_value = profiles
             return result
 
         session.exec.side_effect = exec_side_effect
 
+        mock_jira_service = MagicMock()
+        mock_jira_service.get_live_assignee_workload_map.return_value = {
+            "jira-1": 5,
+            "jira-2": 0,
+            "jira-3": 3,
+        }
+        mock_jira_service_cls.return_value = mock_jira_service
+
         result = get_dashboard_data(session)
 
         assert result.team_members.total == 10
         assert result.team_members.developers == 8
         assert result.team_members.admins == 2
-        assert result.team_utilization.percentage > 0
+        assert result.team_utilization.percentage == 66.7
         assert result.resource_utilization.total_resources == 3
         assert result.resource_utilization.utilized == 2
         assert result.resource_utilization.available == 1
 
-    def test_utilization_high_message(self) -> None:
+    @patch("app.api.dashboard.dashboard_service.JiraIntegrationService")
+    def test_utilization_high_message(self, mock_jira_service_cls: MagicMock) -> None:
         from app.api.dashboard.dashboard_service import get_dashboard_data
 
         session = MagicMock()
 
-        profiles = [_make_profile(total_workload=5) for _ in range(9)]
-        profiles.append(_make_profile(total_workload=0))
+        profiles = [_make_profile(jira_account_id=f"jira-{i}") for i in range(9)]
+        profiles.append(_make_profile(jira_account_id="jira-10"))
 
         call_count = 0
-        def exec_side_effect(stmt: Any) -> MagicMock:
+
+        def exec_side_effect(_stmt: Any) -> MagicMock:
             nonlocal call_count
             result = MagicMock()
             call_count += 1
@@ -370,18 +433,27 @@ class TestGetDashboardData:
 
         session.exec.side_effect = exec_side_effect
 
+        mock_jira_service = MagicMock()
+        mock_jira_service.get_live_assignee_workload_map.return_value = {
+            **{f"jira-{i}": 5 for i in range(9)},
+            "jira-10": 0,
+        }
+        mock_jira_service_cls.return_value = mock_jira_service
+
         result = get_dashboard_data(session)
 
         assert result.team_utilization.percentage == 90.0
         assert result.team_utilization.message == "High utilization"
 
-    def test_utilization_zero_profiles(self) -> None:
+    @patch("app.api.dashboard.dashboard_service.JiraIntegrationService")
+    def test_utilization_zero_profiles(self, mock_jira_service_cls: MagicMock) -> None:
         from app.api.dashboard.dashboard_service import get_dashboard_data
 
         session = MagicMock()
 
         call_count = 0
-        def exec_side_effect(stmt: Any) -> MagicMock:
+
+        def exec_side_effect(_stmt: Any) -> MagicMock:
             nonlocal call_count
             result = MagicMock()
             call_count += 1
@@ -391,26 +463,34 @@ class TestGetDashboardData:
 
         session.exec.side_effect = exec_side_effect
 
+        mock_jira_service = MagicMock()
+        mock_jira_service.get_live_assignee_workload_map.return_value = {}
+        mock_jira_service_cls.return_value = mock_jira_service
+
         result = get_dashboard_data(session)
 
         assert result.team_utilization.percentage == 0.0
         assert result.team_utilization.message == "Capacity available"
         assert result.pending_assignments.count == 0
 
-    def test_resource_allocation_groups_by_position(self) -> None:
+    @patch("app.api.dashboard.dashboard_service.JiraIntegrationService")
+    def test_resource_allocation_groups_by_position(
+        self, mock_jira_service_cls: MagicMock
+    ) -> None:
         from app.api.dashboard.dashboard_service import get_dashboard_data
 
         session = MagicMock()
 
         profiles = [
-            _make_profile(position="Backend"),
-            _make_profile(position="Backend"),
-            _make_profile(position="Frontend"),
-            _make_profile(position=None),
+            _make_profile(jira_account_id="jira-1", position="Backend"),
+            _make_profile(jira_account_id="jira-2", position="Backend"),
+            _make_profile(jira_account_id="jira-3", position="Frontend"),
+            _make_profile(jira_account_id=None, position=None),
         ]
 
         call_count = 0
-        def exec_side_effect(stmt: Any) -> MagicMock:
+
+        def exec_side_effect(_stmt: Any) -> MagicMock:
             nonlocal call_count
             result = MagicMock()
             call_count += 1
@@ -420,6 +500,14 @@ class TestGetDashboardData:
 
         session.exec.side_effect = exec_side_effect
 
+        mock_jira_service = MagicMock()
+        mock_jira_service.get_live_assignee_workload_map.return_value = {
+            "jira-1": 1,
+            "jira-2": 1,
+            "jira-3": 0,
+        }
+        mock_jira_service_cls.return_value = mock_jira_service
+
         result = get_dashboard_data(session)
 
         team_names = [a.team_name for a in result.resource_allocation_by_team]
@@ -427,5 +515,7 @@ class TestGetDashboardData:
         assert "Frontend" in team_names
         assert "Unassigned" in team_names
 
-        backend = next(a for a in result.resource_allocation_by_team if a.team_name == "Backend")
+        backend = next(
+            a for a in result.resource_allocation_by_team if a.team_name == "Backend"
+        )
         assert backend.headcount == 2

@@ -113,12 +113,11 @@ class UserWorkload(BaseModel):
     user_id: str
     name: str
     jira_workload: int
-    github_workload: int
     total_workload: int
 
 
 class ProfileWorkloadCard(BaseModel):
-    jira_vs_github_split: dict[str, int]  # {"jira": 50, "github": 20}
+    jira_workload_total: int
     overloaded_members: list[UserWorkload]
     idle_members: list[UserWorkload]
 

@@ -1425,21 +1425,7 @@ class JiraIntegrationService:
                     .first()
                 )
 
-                # Count vectors for this developer
-                vector_count = (
-                    self.db.query(JiraIssueVector)
-                    .filter(
-                        cast(Any, JiraIssueVector.assignee_account_id == account_id)
-                    )
-                    .count()
-                )
-
                 if profile:
-                    profile.jira_workload = vector_count
-                    profile.total_workload = (
-                        profile.jira_workload + profile.github_workload
-                    )
-                    profile.workload_updated_at = datetime.utcnow()
                     if issue.assignee:
                         profile.jira_display_name = issue.assignee.display_name
                         profile.jira_email = issue.assignee.email_address
