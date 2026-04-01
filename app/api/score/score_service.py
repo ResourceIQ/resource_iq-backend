@@ -427,12 +427,23 @@ class ScoreService:
 
             # Burnout penalty uses live Jira workload only.
             active_tasks = live_jira_workload
-            burnout_level = getattr(profile, "burnout_level", 0.0) or 0.0
-            burnout_penalty = (
-                burnout_level * active_tasks * 10.0
-            )  # Tunable factor to scale the penalty
-            if burnout_level == 0:
+            raw_burnout_level = getattr(profile, "burnout_level", None)
+            burnout_level: float | None = None
+            if isinstance(raw_burnout_level, (int, float)):
+                burnout_level = float(raw_burnout_level)
+            elif isinstance(raw_burnout_level, str):
+                try:
+                    burnout_level = float(raw_burnout_level)
+                except ValueError:
+                    burnout_level = None
+
+            burnout_penalty = 0.0
+            if burnout_level is None:
                 burnout_penalty = active_tasks * 100.0
+            elif burnout_level > 0:
+                burnout_penalty = (
+                    burnout_level * active_tasks * 10.0
+                )  # Tunable factor to scale the penalty
             score_profile.live_jira_workload = live_jira_workload
             score_profile.burnout_penalty = burnout_penalty
 
