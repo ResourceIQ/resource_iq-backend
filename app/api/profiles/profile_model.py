@@ -89,24 +89,13 @@ class ResourceProfile(SQLModel, table=True):
         default=None, description="When GitHub was connected"
     )
 
-    # === Skills & Domains (extracted from NLP analysis) ===
-    skills: str | None = Field(
-        default=None, description="Comma-separated list of skills"
-    )
-    domains: str | None = Field(
-        default=None, description="Comma-separated list of domains/expertise areas"
-    )
-
-    # === Workload Metrics ===
-    jira_workload: int = Field(
-        default=0, description="Number of active Jira issues assigned"
-    )
-    github_workload: int = Field(
-        default=0, description="Number of active GitHub PRs/issues"
-    )
-    total_workload: int = Field(default=0, description="Combined workload score")
-    workload_updated_at: datetime | None = Field(
-        default=None, description="When workload was last calculated"
+    # === Burnout Level ===
+    burnout_level: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=10.0,
+        description="User self-reported burnout level (0-10, higher means more burnout)",
+        nullable=True,
     )
 
     # === Timestamps ===
@@ -123,13 +112,3 @@ class ResourceProfile(SQLModel, table=True):
     def has_github(self) -> bool:
         """Check if GitHub is connected."""
         return self.github_id is not None or self.github_login is not None
-
-    @property
-    def skills_list(self) -> list[str]:
-        """Get skills as a list."""
-        return self.skills.split(",") if self.skills else []
-
-    @property
-    def domains_list(self) -> list[str]:
-        """Get domains as a list."""
-        return self.domains.split(",") if self.domains else []

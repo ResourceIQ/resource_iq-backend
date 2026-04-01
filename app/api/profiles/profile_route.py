@@ -7,6 +7,7 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import selectinload
 
+from app.api.integrations.Jira.jira_service import JiraIntegrationService
 from app.api.profiles.profile_model import ResourceProfile
 from app.api.profiles.profile_schema import (
     GitHubConnectionRequest,
@@ -15,6 +16,8 @@ from app.api.profiles.profile_schema import (
     ProfileWorkload,
     ResourceProfileCreate,
     ResourceProfileResponse,
+    UpdateMyProfileRequest,
+    UpdateProfileRequest,
     UpdateSkillsRequest,
 )
 from app.api.profiles.profile_service import ProfileService
@@ -46,12 +49,7 @@ def _to_response(profile: ResourceProfile) -> ResourceProfileResponse:
         github_avatar_url=profile.github_avatar_url,
         github_connected_at=profile.github_connected_at,
         has_github=profile.github_id is not None or profile.github_login is not None,
-        skills=profile.skills.split(",") if profile.skills else [],
-        domains=profile.domains.split(",") if profile.domains else [],
-        jira_workload=profile.jira_workload,
-        github_workload=profile.github_workload,
-        total_workload=profile.total_workload,
-        workload_updated_at=profile.workload_updated_at,
+        burnout_level=profile.burnout_level or 0.0,
         created_at=profile.created_at,
         updated_at=profile.updated_at,
     )
@@ -62,18 +60,48 @@ async def get_my_profile(
     session: SessionDep, current_user: CurrentUser
 ) -> ResourceProfileResponse:
     """Get the current user's resource profile."""
-    profile = (
-        session.query(ResourceProfile)
-        .filter(cast(Any, ResourceProfile.user_id == current_user.id))
-        .first()
+    profile = ProfileService(session).get_or_create_profile(current_user.id)
+    return _to_response(profile)
+
+
+@router.patch(
+    "/me",
+    response_model=ResourceProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR, Role.USER]))],
+)
+async def update_my_profile(
+    session: SessionDep,
+    current_user: CurrentUser,
+    request: UpdateMyProfileRequest,
+) -> ResourceProfileResponse:
+    """Partially update the current user's own profile."""
+    profile = ProfileService(session).update_profile_for_user(
+        current_user.id,
+        request,
+        allow_position_update=current_user.role in [Role.ADMIN, Role.MODERATOR],
+        create_if_missing=True,
     )
 
-    if not profile:
-        # Auto-create profile for user if it doesn't exist
-        profile = ResourceProfile(user_id=current_user.id)
-        session.add(profile)
-        session.commit()
-        session.refresh(profile)
+    return _to_response(profile)
+
+
+@router.patch(
+    "/{user_id}",
+    response_model=ResourceProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
+async def update_profile_by_user_id(
+    session: SessionDep,
+    user_id: uuid.UUID,
+    request: UpdateProfileRequest,
+) -> ResourceProfileResponse:
+    """Partially update a target user's profile (admin/moderator only)."""
+    profile = ProfileService(session).update_profile_for_user(
+        user_id,
+        request,
+        allow_position_update=True,
+        create_if_missing=True,
+    )
 
     return _to_response(profile)
 
@@ -110,8 +138,6 @@ async def create_profile(
     profile = ResourceProfile(
         user_id=request.user_id,
         position_id=request.position_id,
-        skills=request.skills,
-        domains=request.domains,
     )
     session.add(profile)
     session.commit()
@@ -162,27 +188,30 @@ async def get_all_workloads(
     sort_by: str = Query(default="total", description="Sort by: total, jira, github"),
 ) -> list[ProfileWorkload]:
     """Get workload metrics for all profiles, sorted by workload."""
+    _ = sort_by
     profiles = session.query(ResourceProfile).all()
+
+    jira_counts = JiraIntegrationService(session).get_live_assignee_workload_map(
+        [p.jira_account_id for p in profiles if p.jira_account_id]
+    )
 
     workloads = [
         ProfileWorkload(
             user_id=p.user_id,
             display_name=p.jira_display_name or p.github_display_name,
-            jira_workload=p.jira_workload,
-            github_workload=p.github_workload,
-            total_workload=p.total_workload,
-            last_updated=p.workload_updated_at,
+            jira_workload=(
+                jira_counts.get(p.jira_account_id, 0) if p.jira_account_id else 0
+            ),
+            total_workload=(
+                jira_counts.get(p.jira_account_id, 0) if p.jira_account_id else 0
+            ),
+            last_updated=None,
         )
         for p in profiles
     ]
 
     # Sort by specified field (ascending - least busy first)
-    if sort_by == "jira":
-        workloads.sort(key=lambda w: w.jira_workload)
-    elif sort_by == "github":
-        workloads.sort(key=lambda w: w.github_workload)
-    else:
-        workloads.sort(key=lambda w: w.total_workload)
+    workloads.sort(key=lambda w: w.total_workload)
 
     return workloads
 
@@ -226,37 +255,7 @@ async def connect_jira(
     session: SessionDep, current_user: CurrentUser, request: JiraConnectionRequest
 ) -> ResourceProfileResponse:
     """Connect Jira account to current user's profile."""
-    profile = (
-        session.query(ResourceProfile)
-        .filter(cast(Any, ResourceProfile.user_id == current_user.id))
-        .first()
-    )
-
-    if not profile:
-        profile = ResourceProfile(user_id=current_user.id)
-        session.add(profile)
-
-    # Check if Jira account is already connected to another user
-    existing = (
-        session.query(ResourceProfile)
-        .filter(cast(Any, ResourceProfile.jira_account_id == request.jira_account_id))
-        .filter(cast(Any, ResourceProfile.user_id != current_user.id))
-        .first()
-    )
-    if existing:
-        raise HTTPException(
-            status_code=400, detail="Jira account already connected to another user"
-        )
-
-    profile.jira_account_id = request.jira_account_id
-    profile.jira_display_name = request.jira_display_name
-    profile.jira_email = request.jira_email
-    profile.jira_avatar_url = request.jira_avatar_url
-    profile.jira_connected_at = datetime.utcnow()
-    profile.updated_at = datetime.utcnow()
-
-    session.commit()
-    session.refresh(profile)
+    profile = ProfileService(session).connect_jira_for_user(current_user.id, request)
 
     return _to_response(profile)
 
@@ -266,40 +265,7 @@ async def connect_github(
     session: SessionDep, current_user: CurrentUser, request: GitHubConnectionRequest
 ) -> ResourceProfileResponse:
     """Connect GitHub account to current user's profile."""
-    profile = (
-        session.query(ResourceProfile)
-        .filter(cast(Any, ResourceProfile.user_id == current_user.id))
-        .first()
-    )
-
-    if not profile:
-        profile = ResourceProfile(user_id=current_user.id)
-        session.add(profile)
-
-    # Check if GitHub account is already connected to another user
-    if request.github_login:
-        existing = (
-            session.query(ResourceProfile)
-            .filter(cast(Any, ResourceProfile.github_login == request.github_login))
-            .filter(cast(Any, ResourceProfile.user_id != current_user.id))
-            .first()
-        )
-        if existing:
-            raise HTTPException(
-                status_code=400,
-                detail="GitHub account already connected to another user",
-            )
-
-    profile.github_id = request.github_id
-    profile.github_login = request.github_login
-    profile.github_display_name = request.github_display_name
-    profile.github_email = request.github_email
-    profile.github_avatar_url = request.github_avatar_url
-    profile.github_connected_at = datetime.utcnow()
-    profile.updated_at = datetime.utcnow()
-
-    session.commit()
-    session.refresh(profile)
+    profile = ProfileService(session).connect_github_for_user(current_user.id, request)
 
     return _to_response(profile)
 
@@ -323,7 +289,6 @@ async def disconnect_jira(
     profile.jira_email = None
     profile.jira_avatar_url = None
     profile.jira_connected_at = None
-    profile.jira_workload = 0
     profile.updated_at = datetime.utcnow()
 
     session.commit()
@@ -352,7 +317,6 @@ async def disconnect_github(
     profile.github_email = None
     profile.github_avatar_url = None
     profile.github_connected_at = None
-    profile.github_workload = 0
     profile.updated_at = datetime.utcnow()
 
     session.commit()
@@ -361,38 +325,19 @@ async def disconnect_github(
     return _to_response(profile)
 
 
-@router.put("/me/skills", response_model=ResourceProfileResponse)
+@router.put(
+    "/me/skills",
+    response_model=ResourceProfileResponse,
+    dependencies=[Depends(RoleChecker([Role.ADMIN, Role.MODERATOR]))],
+)
 async def update_skills(
     session: SessionDep, current_user: CurrentUser, request: UpdateSkillsRequest
 ) -> ResourceProfileResponse:
-    """Update skills and domains for current user's profile."""
-    profile = (
-        session.query(ResourceProfile)
-        .filter(cast(Any, ResourceProfile.user_id == current_user.id))
-        .first()
+    """Update profile metadata for current user's profile."""
+    profile = ProfileService(session).update_position_for_user(
+        current_user.id,
+        request.position_id,
     )
-
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-
-    if request.position_id is not None:
-        from app.api.profiles.position_model import JobPosition
-
-        position = session.get(JobPosition, request.position_id)
-        if not position:
-            raise HTTPException(
-                status_code=400, detail="Invalid position_id: Job position not found"
-            )
-        profile.position_id = request.position_id
-
-    if request.skills is not None:
-        profile.skills = ",".join(request.skills)
-    if request.domains is not None:
-        profile.domains = ",".join(request.domains)
-
-    profile.updated_at = datetime.utcnow()
-    session.commit()
-    session.refresh(profile)
 
     return _to_response(profile)
 
