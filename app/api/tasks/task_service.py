@@ -203,56 +203,56 @@ def execute_full_sync_task(
     try:
         request = SyncAllRequest.model_validate(request_payload)
 
-        with Session(engine) as session:
+        def update_sync_progress(progress: int, message: str) -> None:
+            # Reserve 10-70 for embedding sync progress updates.
+            mapped_progress = 10 + int(progress * 0.6)
+            store.append_log(
+                task_id,
+                f"[Sync] {message}",
+                progress=mapped_progress,
+                status="running",
+            )
 
-            def update_sync_progress(progress: int, message: str) -> None:
-                # Reserve 10-70 for embedding sync progress updates.
-                mapped_progress = 10 + int(progress * 0.6)
-                store.append_log(
-                    task_id,
-                    f"[Sync] {message}",
-                    progress=mapped_progress,
-                    status="running",
-                )
-
+        with Session(engine) as sync_session:
             sync_result = run_sync_all_vectors(
-                session=session,
+                session=sync_session,
                 request=request,
                 progress_callback=update_sync_progress,
             )
 
-            if sync_result.status == "failed":
-                store.append_log(
-                    task_id,
-                    "[Sync] Embedding sync failed; skipping KG build",
-                    progress=100,
-                    status="failed",
-                )
-                store.record_last_sync(
-                    "vector_sync",
-                    {
-                        "task_id": task_id,
-                        "source": "full_sync",
-                        "status": "failed",
-                        "completed_at": _utc_now(),
-                        "request": request.model_dump(),
-                        "github": sync_result.github,
-                        "jira": sync_result.jira,
-                        "total_embeddings": sync_result.total_embeddings,
-                        "errors": sync_result.errors,
-                    },
-                )
-                return
-
+        if sync_result.status == "failed":
             store.append_log(
                 task_id,
-                "[KG] Starting knowledge graph build",
-                progress=75,
-                status="running",
+                "[Sync] Embedding sync failed; skipping KG build",
+                progress=100,
+                status="failed",
             )
+            store.record_last_sync(
+                "vector_sync",
+                {
+                    "task_id": task_id,
+                    "source": "full_sync",
+                    "status": "failed",
+                    "completed_at": _utc_now(),
+                    "request": request.model_dump(),
+                    "github": sync_result.github,
+                    "jira": sync_result.jira,
+                    "total_embeddings": sync_result.total_embeddings,
+                    "errors": sync_result.errors,
+                },
+            )
+            return
 
+        store.append_log(
+            task_id,
+            "[KG] Starting knowledge graph build",
+            progress=75,
+            status="running",
+        )
+
+        with Session(engine) as kg_session:
             graph_service = KnowledgeGraphService()
-            builder = KGBuildService(session, graph_service)
+            builder = KGBuildService(kg_session, graph_service)
             kg_result = builder.build_from_stored_vectors(
                 author_github_id=author_github_id,
                 batch_size=batch_size,
