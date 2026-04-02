@@ -6,7 +6,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any, cast
 
-import redis  # type: ignore[import-untyped]
+import redis
 
 from app.core.config import settings
 
