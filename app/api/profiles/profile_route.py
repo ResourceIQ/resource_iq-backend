@@ -36,6 +36,7 @@ def _to_response(profile: ResourceProfile) -> ResourceProfileResponse:
         address=profile.address,
         position_id=profile.position_id,
         position=profile.position.name if profile.position else None,
+        team_id=profile.team_id,
         jira_account_id=profile.jira_account_id,
         jira_display_name=profile.jira_display_name,
         jira_email=profile.jira_email,
